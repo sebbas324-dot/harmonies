@@ -1,0 +1,2896 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Configuración viewport optimizada para PWA en iPhone con zonas seguras -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+  <!-- Etiquetas PWA y modo pantalla completa en iOS (Safari -> Añadir a pantalla de inicio) -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Harmonies" />
+  <meta name="application-name" content="Harmonies" />
+  <meta name="theme-color" content="#2F5233" />
+  <meta name="description" content="Contador de puntos oficial para el juego de mesa Harmonies con sincronización en Google Sheets." />
+
+  <title>Harmonies — Contador de Puntos</title>
+
+  <!-- Enlaces dinámicos para icono iOS, favicon y Web App Manifest (se rellenan automáticamente vía Canvas) -->
+  <link id="dynamic-apple-icon" rel="apple-touch-icon" sizes="512x512" href="" />
+  <link id="dynamic-favicon" rel="icon" type="image/png" href="" />
+  <link id="dynamic-manifest" rel="manifest" href="" />
+
+  <!-- Tipografía Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          },
+          colors: {
+            forestDeep: '#2F5233',
+            forest: '#3A7D44',
+            parchment: '#FBF8F1',
+            parchmentDark: '#F2ECE0',
+            ink: '#2C2A26',
+            inkMuted: '#6B655B',
+            trunk: '#8C5A3C',
+            mountain: '#5C6773',
+            wheat: '#D99B26',
+            terracotta: '#C84B31',
+            river: '#2B7A9B',
+            ochre: '#C47228',
+            spirit: '#6D5A99',
+          },
+          boxShadow: {
+            card: '0 2px 10px -2px rgba(44, 42, 38, 0.06), 0 1px 3px rgba(44, 42, 38, 0.04)',
+            float: '0 8px 24px -4px rgba(44, 42, 38, 0.14), 0 2px 6px rgba(44, 42, 38, 0.06)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* Estética orgánica tipo papel pergamino y tacto nativo móvil */
+    html, body {
+      background-color: #2F5233;
+      color: #2C2A26;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+    }
+
+    #app {
+      background-color: #FBF8F1;
+      background-image:
+        radial-gradient(at 15% 12%, rgba(58, 125, 68, 0.05) 0px, transparent 45%),
+        radial-gradient(at 85% 18%, rgba(43, 122, 155, 0.05) 0px, transparent 45%),
+        radial-gradient(at 50% 90%, rgba(217, 155, 38, 0.045) 0px, transparent 50%);
+      padding-bottom: calc(6.75rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Respeto a Dynamic Island / Notch y barra de inicio de iPhone */
+    .safe-header {
+      padding-top: calc(0.65rem + env(safe-area-inset-top, 0px));
+    }
+
+    .safe-footer {
+      padding-bottom: calc(0.65rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Evita zoom accidental por doble toque al pulsar rápido +/- en iOS */
+    button, input, label, a {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Ocultar barras de desplazamiento horizontales */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Micro-interacción táctil */
+    .btn-tap {
+      transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+    }
+    .btn-tap:active:not(:disabled) {
+      transform: scale(0.94);
+    }
+
+    /* Animaciones suaves */
+    @keyframes fadeSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .animate-fade-in {
+      animation: fadeSlideUp 0.2s ease-out;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin-fast {
+      animation: spin 0.75s linear infinite;
+    }
+
+    /* Quitar flechas por defecto de inputs numéricos */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+  </style>
+</head>
+<body class="font-sans antialiased selection:bg-forest/20 selection:text-ink">
+
+  <!-- Contenedor raíz de la aplicación -->
+  <div id="app" class="flex flex-col min-h-screen">
+
+    <!-- ==================== CABECERA NATIVA iOS (ZONA SEGURA SUPERIOR) ==================== -->
+    <header class="sticky top-0 z-30 bg-forestDeep text-parchment shadow-md safe-header">
+      <div class="max-w-5xl mx-auto px-3 sm:px-6 pb-3">
+        <!-- Fila 1: Identidad + Insignia de estado Google Sheets + Botón nueva partida -->
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-9 h-9 rounded-xl bg-white/12 border border-white/20 flex items-center justify-center shrink-0">
+              <!-- Emblema hexagonal de 3 fichas -->
+              <svg class="w-6 h-6" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                <polygon points="16,3 23,7 23,15 16,19 9,15 9,7" fill="#5CB868" stroke="#2F5233" stroke-width="1.2"/>
+                <polygon points="10,13 17,17 17,25 10,29 3,25 3,17" fill="#4BA3C7" stroke="#2F5233" stroke-width="1.2"/>
+                <polygon points="22,13 29,17 29,25 22,29 15,25 15,17" fill="#F0B94B" stroke="#2F5233" stroke-width="1.2"/>
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white leading-none truncate">Harmonies</h1>
+              <p class="text-[11px] font-medium text-white/70 mt-0.5 truncate">Contador de Puntos</p>
+            </div>
+          </div>
+
+          <!-- Derecha: Insignia estado Google Sheets + Reiniciar -->
+          <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              id="btn-cloud-status"
+              type="button"
+              class="btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold border transition-all bg-white/10 border-white/20 text-white"
+              title="Configurar o ver estado de Google Sheets"
+            >
+              <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+              <span id="cloud-status-text">Conectando...</span>
+            </button>
+
+            <button
+              id="btn-reset-scores"
+              type="button"
+              class="btn-tap inline-flex items-center justify-center w-9 h-9 sm:w-auto sm:px-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold gap-1.5"
+              title="Nueva partida (reiniciar puntos)"
+              aria-label="Nueva partida"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span class="hidden sm:inline">Nueva</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Fila 2: Configuración rápida (Cara A/B, Espíritu, Jugadores) -->
+        <div class="mt-2.5 pt-2.5 border-t border-white/12 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <!-- Selector Cara A / Cara B -->
+            <div class="inline-flex p-0.5 rounded-xl bg-black/20 border border-white/10" role="group" aria-label="Cara del tablero">
+              <button
+                id="btn-board-a"
+                type="button"
+                class="btn-tap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+              >
+                <span class="w-2 h-2 rounded-full bg-[#5BB7DB]"></span>
+                Cara A · Río
+              </button>
+              <button
+                id="btn-board-b"
+                type="button"
+                class="btn-tap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+              >
+                <span class="w-2 h-2 rounded-full bg-[#F0B94B]"></span>
+                Cara B · Islas
+              </button>
+            </div>
+
+            <!-- Interruptor Espíritu de la Naturaleza -->
+            <button
+              id="btn-toggle-spirit"
+              type="button"
+              class="btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all"
+              aria-pressed="false"
+            >
+              <span id="spirit-toggle-dot" class="w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors"></span>
+              <span>Espíritu</span>
+            </button>
+          </div>
+
+          <!-- Selector de número de jugadores (1-4) -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-medium text-white/75 hidden sm:inline">Jugadores:</span>
+            <div class="inline-flex items-center rounded-xl bg-black/20 border border-white/12 p-0.5">
+              <button
+                id="btn-remove-player"
+                type="button"
+                class="btn-tap w-7 h-7 rounded-lg flex items-center justify-center text-white/85 hover:bg-white/15 disabled:opacity-35 disabled:cursor-not-allowed font-bold text-base"
+                title="Quitar último jugador"
+                aria-label="Quitar último jugador"
+              >−</button>
+              <span id="player-count-badge" class="px-2 text-xs font-extrabold text-white tabular-nums">2</span>
+              <button
+                id="btn-add-player"
+                type="button"
+                class="btn-tap w-7 h-7 rounded-lg flex items-center justify-center text-white/85 hover:bg-white/15 disabled:opacity-35 disabled:cursor-not-allowed font-bold text-base"
+                title="Añadir jugador (máx. 4)"
+                aria-label="Añadir jugador"
+              >+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila 3: Navegación principal de 3 secciones -->
+        <nav class="mt-2.5 grid grid-cols-3 gap-1 p-1 rounded-2xl bg-black/22 border border-white/10" aria-label="Navegación principal">
+          <button
+            id="tab-count"
+            type="button"
+            class="btn-tap py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all"
+          >
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="2" width="16" height="20" rx="2"/>
+              <line x1="8" y1="6" x2="16" y2="6"/>
+              <line x1="8" y1="11" x2="10" y2="11"/>
+              <line x1="14" y1="11" x2="16" y2="11"/>
+              <line x1="8" y1="16" x2="16" y2="16"/>
+            </svg>
+            <span>Contar</span>
+          </button>
+
+          <button
+            id="tab-results"
+            type="button"
+            class="btn-tap py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all"
+          >
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+              <path d="M4 22h16"/>
+              <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+            <span>Resultados</span>
+          </button>
+
+          <button
+            id="tab-history"
+            type="button"
+            class="btn-tap py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all"
+          >
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Historial</span>
+            <span id="history-count-pill" class="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold tabular-nums bg-white/15">0</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- ==================== CONTENIDO PRINCIPAL ==================== -->
+    <main class="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 pt-4">
+      <!-- Vista 1: Contar Puntos -->
+      <section id="view-count" class="space-y-4">
+        <!-- Pestañas de jugadores + edición de nombre -->
+        <div class="bg-white/90 rounded-2xl border border-[#E7DFCE] p-2 shadow-card">
+          <div id="player-tabs-container" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+            <!-- Generado dinámicamente -->
+          </div>
+          <div class="mt-2 pt-2 border-t border-[#F0E9DC] flex items-center justify-between gap-2 px-1">
+            <label for="active-player-name-input" class="text-xs font-semibold text-inkMuted flex items-center gap-1.5 shrink-0">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+              </svg>
+              Nombre:
+            </label>
+            <input
+              id="active-player-name-input"
+              type="text"
+              maxlength="24"
+              placeholder="Nombre del jugador"
+              class="flex-1 min-w-0 bg-parchment border border-[#E2D8C5] focus:border-forest focus:ring-2 focus:ring-forest/15 rounded-xl px-3 py-1.5 text-sm font-semibold text-ink outline-none transition-all"
+            />
+            <span id="active-player-rank-pill" class="hidden sm:inline-flex items-center px-2.5 py-1 rounded-lg bg-parchmentDark text-[11px] font-semibold text-inkMuted shrink-0"></span>
+          </div>
+        </div>
+
+        <!-- Rejilla de categorías -->
+        <div id="categories-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Generado dinámicamente -->
+        </div>
+      </section>
+
+      <!-- Vista 2: Resultados, Podio y Hoja Oficial -->
+      <section id="view-results" class="hidden space-y-5 animate-fade-in">
+        <!-- Generado dinámicamente -->
+      </section>
+
+      <!-- Vista 3: Historial de Partidas (Google Sheets / Local) -->
+      <section id="view-history" class="hidden space-y-4 animate-fade-in">
+        <!-- Generado dinámicamente -->
+      </section>
+    </main>
+
+    <!-- ==================== BARRA FIJA INFERIOR (RESPETA SAFE AREA iOS) ==================== -->
+    <div id="sticky-footer-bar" class="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-[#E2D8C5] shadow-float safe-footer">
+      <div class="max-w-5xl mx-auto px-3 sm:px-6 pt-2.5 flex items-center justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-1.5">
+            <span id="footer-player-name" class="text-xs font-bold text-ink truncate">Jugador 1</span>
+            <span class="text-[11px] text-inkMuted">·</span>
+            <span id="footer-breakdown" class="text-[11px] sm:text-xs font-medium text-inkMuted truncate">Paisajes 0 + Animales 0</span>
+          </div>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-inkMuted">Total</span>
+            <span id="footer-total-score" class="text-2xl font-extrabold text-ink tabular-nums leading-none">0</span>
+            <span class="text-xs font-semibold text-inkMuted">pts</span>
+          </div>
+        </div>
+
+        <button
+          id="btn-goto-results"
+          type="button"
+          class="btn-tap shrink-0 inline-flex items-center gap-2 px-4 sm:px-5 py-3 rounded-2xl bg-forestDeep text-white hover:bg-[#244027] font-bold text-xs sm:text-sm shadow-sm"
+        >
+          <span>Ver Resultados</span>
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/>
+            <path d="m12 5 7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL PERSONALIZADO (SIN alert/confirm) ==================== -->
+  <div id="modal-backdrop" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-ink/50 backdrop-blur-xs">
+    <div id="modal-card" class="bg-parchment border border-[#E2D8C5] rounded-3xl max-w-md w-full p-5 shadow-float animate-fade-in max-h-[88vh] overflow-y-auto">
+      <h3 id="modal-title" class="text-lg font-extrabold text-ink"></h3>
+      <div id="modal-body" class="mt-2.5 text-sm text-inkMuted leading-relaxed"></div>
+      <div id="modal-actions" class="mt-5 flex flex-wrap items-center justify-end gap-2"></div>
+    </div>
+  </div>
+
+  <!-- ==================== NOTIFICACIONES TOAST ==================== -->
+  <div id="toast-container" class="fixed top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex flex-col items-center gap-2 w-full max-w-xs px-4"></div>
+
+  <!-- ==================== SCRIPT: PWA + GOOGLE SHEETS (APPS SCRIPT) + LÓGICA ==================== -->
+  <script>
+    // =========================================================================
+    // 1. CONFIGURACIÓN DE GOOGLE SHEETS (APPS SCRIPT WEB APP)
+    // =========================================================================
+    // Pega aquí tu URL terminada en "/exec" tras implementar tu Google Apps Script.
+    // Así funcionará automáticamente en GitHub Pages, tu iPhone o cualquier dispositivo.
+    // (También puedes pegarla temporalmente desde el botón de estado en la cabecera).
+    const GOOGLE_SHEETS_API_URL = "PEGA_AQUI_TU_URL_EXEC";
+
+    // =========================================================================
+    // 2. GENERACIÓN AUTOMÁTICA DE ICONO PNG + MANIFEST PWA (SIN ARCHIVOS EXTRA)
+    // =========================================================================
+    function setupDynamicPwaAssets() {
+      try {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Fondo cuadrado con degradado verde bosque orgánico (iOS recorta esquinas automáticamente)
+        const bgGrad = ctx.createLinearGradient(0, 0, size, size);
+        bgGrad.addColorStop(0, '#2F5233');
+        bgGrad.addColorStop(0.55, '#3A6B40');
+        bgGrad.addColorStop(1, '#244028');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, size, size);
+
+        // Halo cálido central sutil
+        const glow = ctx.createRadialGradient(size / 2, size / 2, 20, size / 2, size / 2, 240);
+        glow.addColorStop(0, 'rgba(251, 248, 241, 0.22)');
+        glow.addColorStop(1, 'rgba(251, 248, 241, 0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, size, size);
+
+        // Función auxiliar para dibujar un hexágono puntiagudo
+        function drawHex(cx, cy, r, fillColor, strokeColor, lineWidth = 10) {
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i - Math.PI / 2;
+            const x = cx + r * Math.cos(angle);
+            const y = cy + r * Math.sin(angle);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+          ctx.lineWidth = lineWidth;
+          ctx.strokeStyle = strokeColor;
+          ctx.stroke();
+        }
+
+        // Trío de hexágonos emblemáticos de Harmonies (Árbol, Río, Campo) + centro cálido
+        drawHex(256, 168, 92, '#4EA85B', '#FBF8F1', 11);
+        drawHex(174, 304, 92, '#2B7A9B', '#FBF8F1', 11);
+        drawHex(338, 304, 92, '#E5A934', '#FBF8F1', 11);
+        drawHex(256, 258, 42, '#C84B31', '#FBF8F1', 8);
+
+        // Pequeño brillo superior en los hexágonos
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+        ctx.beginPath();
+        ctx.arc(256, 150, 22, 0, Math.PI * 2);
+        ctx.fill();
+
+        const pngDataUrl = canvas.toDataURL('image/png');
+
+        const appleIconLink = document.getElementById('dynamic-apple-icon');
+        const faviconLink = document.getElementById('dynamic-favicon');
+        if (appleIconLink) appleIconLink.href = pngDataUrl;
+        if (faviconLink) faviconLink.href = pngDataUrl;
+
+        // Manifiesto Web App dinámico para modo standalone
+        const manifestObj = {
+          name: 'Harmonies — Contador de Puntos',
+          short_name: 'Harmonies',
+          description: 'Contador oficial de puntos para el juego de mesa Harmonies',
+          start_url: window.location.pathname || './',
+          display: 'standalone',
+          orientation: 'portrait',
+          background_color: '#FBF8F1',
+          theme_color: '#2F5233',
+          icons: [
+            {
+              src: pngDataUrl,
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any maskable',
+            },
+          ],
+        };
+
+        const manifestBlob = new Blob([JSON.stringify(manifestObj)], { type: 'application/manifest+json' });
+        const manifestUrl = URL.createObjectURL(manifestBlob);
+        const manifestLink = document.getElementById('dynamic-manifest');
+        if (manifestLink) manifestLink.href = manifestUrl;
+      } catch (err) {
+        console.warn('No se pudieron generar los recursos PWA dinámicos:', err);
+      }
+    }
+
+    // =========================================================================
+    // 3. CONSTANTES DEL JUEGO Y ESTADO EN MEMORIA
+    // =========================================================================
+    const STORAGE_DRAFT_KEY = 'harmonies_pwa_draft_v2';
+    const STORAGE_LOCAL_HISTORY_KEY = 'harmonies_pwa_history_v2';
+    const STORAGE_SHEETS_URL_KEY = 'harmonies_sheets_api_url_v1';
+    const QUICK_ANIMAL_VALUES = [2, 3, 4, 5, 6, 7, 8, 10, 12, 15];
+    const RIVER_TABLE = [
+      { len: 0, label: '0–1', pts: 0 },
+      { len: 2, label: '2', pts: 2 },
+      { len: 3, label: '3', pts: 5 },
+      { len: 4, label: '4', pts: 8 },
+      { len: 5, label: '5', pts: 11 },
+      { len: 6, label: '6', pts: 15 },
+      { len: 7, label: '7', pts: 19 },
+      { len: 8, label: '8', pts: 23 },
+    ];
+
+    function createPlayer(index) {
+      return {
+        id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        name: `Jugador ${index + 1}`,
+        trees: { h1: 0, h2: 0, h3: 0 },
+        mountains: { h1: 0, h2: 0, h3: 0 },
+        fields: 0,
+        buildings: 0,
+        riverLength: 0,
+        islands: 0,
+        animals: [],
+        spirit: 0,
+        cubes: 0,
+      };
+    }
+
+    let state = {
+      boardSide: 'A', // 'A' (Río) | 'B' (Islas)
+      spiritEnabled: false,
+      activeView: 'count', // 'count' | 'results' | 'history'
+      activePlayerIndex: 0,
+      players: [createPlayer(0), createPlayer(1)],
+      expandedRules: {},
+    };
+
+    // Estado de sincronización con Google Sheets / Local
+    let cloudState = {
+      mode: 'connecting', // 'connecting' | 'sheets' | 'local'
+      connected: false,
+      apiUrl: '',
+      errorMessage: '',
+      isSaving: false,
+      isLoadingHistory: false,
+      lastSyncedAt: null,
+    };
+
+    let matchHistory = [];
+
+    // =========================================================================
+    // 4. PERSISTENCIA DEL BORRADOR EN CURSO Y RESPALDO LOCAL
+    // =========================================================================
+    function loadDraftFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_DRAFT_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.players) && parsed.players.length >= 1 && parsed.players.length <= 4) {
+          state = {
+            boardSide: parsed.boardSide === 'B' ? 'B' : 'A',
+            spiritEnabled: Boolean(parsed.spiritEnabled),
+            activeView: ['count', 'results', 'history'].includes(parsed.activeView) ? parsed.activeView : 'count',
+            activePlayerIndex: Math.min(Math.max(0, parsed.activePlayerIndex || 0), parsed.players.length - 1),
+            expandedRules: parsed.expandedRules || {},
+            players: parsed.players.map((p, idx) => ({
+              id: p.id || `p_${idx}`,
+              name: typeof p.name === 'string' && p.name.trim() ? p.name : `Jugador ${idx + 1}`,
+              trees: {
+                h1: Math.max(0, Number(p.trees?.h1) || 0),
+                h2: Math.max(0, Number(p.trees?.h2) || 0),
+                h3: Math.max(0, Number(p.trees?.h3) || 0),
+              },
+              mountains: {
+                h1: Math.max(0, Number(p.mountains?.h1) || 0),
+                h2: Math.max(0, Number(p.mountains?.h2) || 0),
+                h3: Math.max(0, Number(p.mountains?.h3) || 0),
+              },
+              fields: Math.max(0, Number(p.fields) || 0),
+              buildings: Math.max(0, Number(p.buildings) || 0),
+              riverLength: Math.max(0, Number(p.riverLength) || 0),
+              islands: Math.max(0, Number(p.islands) || 0),
+              animals: Array.isArray(p.animals)
+                ? p.animals.map((n) => Math.max(0, Number(n) || 0)).filter((n) => n > 0)
+                : [],
+              spirit: Math.max(0, Number(p.spirit) || 0),
+              cubes: Math.max(0, Number(p.cubes) || 0),
+            })),
+          };
+        }
+      } catch (err) {
+        console.warn('No se pudo recuperar el borrador local:', err);
+      }
+    }
+
+    function saveDraftToLocalStorage() {
+      try {
+        localStorage.setItem(STORAGE_DRAFT_KEY, JSON.stringify(state));
+      } catch (err) {
+        console.warn('No se pudo guardar el borrador local:', err);
+      }
+    }
+
+    function loadLocalHistory() {
+      try {
+        const raw = localStorage.getItem(STORAGE_LOCAL_HISTORY_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function saveLocalHistory(list) {
+      try {
+        localStorage.setItem(STORAGE_LOCAL_HISTORY_KEY, JSON.stringify(list));
+      } catch (err) {
+        console.warn('No se pudo guardar el historial local:', err);
+      }
+    }
+
+    // =========================================================================
+    // 5. CONEXIÓN A GOOGLE SHEETS VÍA APPS SCRIPT (GET / POST)
+    // =========================================================================
+    function isValidAppsScriptUrl(url) {
+      if (typeof url !== 'string') return false;
+      const trimmed = url.trim();
+      return (
+        trimmed.startsWith('https://script.google.com/') &&
+        !trimmed.includes('PEGA_AQUI') &&
+        trimmed.includes('/exec')
+      );
+    }
+
+    function resolveActiveSheetsUrl() {
+      // Prioridad: 1) URL guardada manualmente desde la app, 2) constante del código
+      try {
+        const saved = localStorage.getItem(STORAGE_SHEETS_URL_KEY);
+        if (isValidAppsScriptUrl(saved)) return saved.trim();
+      } catch (err) {
+        // Ignorar si el navegador bloquea storage
+      }
+      if (isValidAppsScriptUrl(GOOGLE_SHEETS_API_URL)) {
+        return GOOGLE_SHEETS_API_URL.trim();
+      }
+      return '';
+    }
+
+    function activateLocalFallback(reason = '') {
+      cloudState.mode = 'local';
+      cloudState.connected = false;
+      cloudState.isLoadingHistory = false;
+      cloudState.errorMessage = reason;
+      matchHistory = loadLocalHistory();
+      renderCloudBadge();
+      updateHistoryCountPill();
+      if (state.activeView === 'history') renderHistoryView();
+      if (state.activeView === 'results') renderResultsView();
+    }
+
+    function formatSheetDate(val, fallbackMs) {
+      if (!val && fallbackMs) {
+        return new Date(fallbackMs).toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+      const str = String(val || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        }
+      }
+      return str || 'Reciente';
+    }
+
+    function parseBoolEspiritu(val) {
+      if (typeof val === 'boolean') return val;
+      const s = String(val || '').trim().toLowerCase();
+      return s === 'sí' || s === 'si' || s === 'true' || s === '1';
+    }
+
+    function groupSheetRowsIntoMatches(rows) {
+      const map = new Map();
+
+      rows.forEach((row) => {
+        const id = String(row.partidaId || '').trim();
+        if (!id) return;
+
+        const createdAtMs = Number(row.createdAtMs) || 0;
+        const trees = Number(row.arboles) || 0;
+        const mountains = Number(row.montanas) || 0;
+        const fields = Number(row.campos) || 0;
+        const buildings = Number(row.edificios) || 0;
+        const water = Number(row.agua) || 0;
+        const landscapes = row.paisajes !== '' && row.paisajes !== undefined
+          ? (Number(row.paisajes) || 0)
+          : (trees + mountains + fields + buildings + water);
+        const animals = Number(row.animales) || 0;
+        const spirit = Number(row.espiritu) || 0;
+        const total = row.total !== '' && row.total !== undefined
+          ? (Number(row.total) || 0)
+          : (landscapes + animals + spirit);
+        const cubes = Number(row.cubos) || 0;
+
+        if (!map.has(id)) {
+          map.set(id, {
+            id,
+            source: 'sheets',
+            dateStr: formatSheetDate(row.fecha, createdAtMs),
+            createdAtMs,
+            boardSide: String(row.caraTablero).trim().toUpperCase() === 'B' ? 'B' : 'A',
+            spiritEnabled: parseBoolEspiritu(row.espirituActivo),
+            winnerLabel: String(row.ganador || 'Partida'),
+            topScore: Number(row.mejorPuntuacion) || total,
+            players: [],
+          });
+        }
+
+        const match = map.get(id);
+        match.players.push({
+          name: String(row.jugador || 'Jugador'),
+          rank: Number(row.posicion) || (match.players.length + 1),
+          total,
+          trees,
+          mountains,
+          fields,
+          buildings,
+          water,
+          landscapes,
+          animals,
+          spirit,
+          cubes,
+        });
+      });
+
+      const list = Array.from(map.values());
+      list.forEach((m) => {
+        m.players.sort((a, b) => (a.rank - b.rank) || (b.total - a.total));
+        if (m.players.length > 0) {
+          const maxTotal = Math.max(...m.players.map((p) => p.total));
+          if (maxTotal > m.topScore) m.topScore = maxTotal;
+        }
+      });
+
+      list.sort((a, b) => b.createdAtMs - a.createdAtMs);
+      return list;
+    }
+
+    async function fetchSheetsJson(url, options = {}) {
+      const res = await fetch(url, { redirect: 'follow', ...options });
+      const text = await res.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        throw new Error('La respuesta no es JSON. Comprueba que la implementación esté en "Cualquier usuario".');
+      }
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error || `Error HTTP ${res.status}`);
+      }
+      return json;
+    }
+
+    async function syncHistoryFromSheets({ silent = false } = {}) {
+      const url = cloudState.apiUrl || resolveActiveSheetsUrl();
+      if (!url) {
+        activateLocalFallback('Aún no has pegado la URL de tu Google Apps Script.');
+        return false;
+      }
+
+      cloudState.apiUrl = url;
+      cloudState.isLoadingHistory = true;
+      if (!cloudState.connected) {
+        cloudState.mode = 'connecting';
+        renderCloudBadge();
+      }
+      if (state.activeView === 'history') renderHistoryView();
+
+      try {
+        const sep = url.includes('?') ? '&' : '?';
+        const data = await fetchSheetsJson(`${url}${sep}t=${Date.now()}`);
+        const rows = Array.isArray(data.rows) ? data.rows : (Array.isArray(data) ? data : []);
+
+        matchHistory = groupSheetRowsIntoMatches(rows);
+        cloudState.mode = 'sheets';
+        cloudState.connected = true;
+        cloudState.errorMessage = '';
+        cloudState.lastSyncedAt = Date.now();
+        cloudState.isLoadingHistory = false;
+
+        renderCloudBadge();
+        updateHistoryCountPill();
+        if (state.activeView === 'history') renderHistoryView();
+        if (state.activeView === 'results') renderResultsView();
+        if (!silent) showToast('Historial actualizado desde Sheets', 'success');
+        return true;
+      } catch (err) {
+        console.warn('Error al leer Google Sheets:', err);
+        activateLocalFallback(err.message || 'No se pudo conectar con Google Sheets.');
+        if (!silent) showToast('Sin conexión con Sheets · usando modo local', 'danger');
+        return false;
+      }
+    }
+
+    async function initCloudConnection() {
+      const url = resolveActiveSheetsUrl();
+      if (!url) {
+        activateLocalFallback('Pega la URL "/exec" de tu Google Apps Script para sincronizar.');
+        return;
+      }
+      cloudState.apiUrl = url;
+      await syncHistoryFromSheets({ silent: true });
+    }
+
+    // =========================================================================
+    // 6. CÁLCULO OFICIAL DE PUNTOS Y SOLES SOLITARIO DE HARMONIES
+    // =========================================================================
+    function calcRiverPoints(length) {
+      const len = Math.max(0, Math.floor(Number(length) || 0));
+      if (len <= 1) return 0;
+      if (len === 2) return 2;
+      if (len === 3) return 5;
+      if (len === 4) return 8;
+      if (len === 5) return 11;
+      if (len === 6) return 15;
+      return 15 + (len - 6) * 4;
+    }
+
+    function calcPlayerScores(player) {
+      const trees = player.trees.h1 * 1 + player.trees.h2 * 3 + player.trees.h3 * 7;
+      const mountains = player.mountains.h1 * 1 + player.mountains.h2 * 3 + player.mountains.h3 * 7;
+      const fields = player.fields * 5;
+      const buildings = player.buildings * 5;
+      const water = state.boardSide === 'A'
+        ? calcRiverPoints(player.riverLength)
+        : player.islands * 5;
+
+      const landscapes = trees + mountains + fields + buildings + water;
+      const animals = player.animals.reduce((acc, v) => acc + v, 0);
+      const spirit = state.spiritEnabled ? player.spirit : 0;
+      const total = landscapes + animals + spirit;
+
+      return {
+        trees,
+        mountains,
+        fields,
+        buildings,
+        water,
+        landscapes,
+        animals,
+        animalCount: player.animals.length,
+        spirit,
+        total,
+        cubes: player.cubes,
+      };
+    }
+
+    /** Escala oficial de Soles para el modo solitario de Harmonies */
+    function calcSoloSuns(total) {
+      if (total < 40) return { suns: 0, nextTarget: 40, label: 'Aprendiz del paisaje' };
+      if (total < 70) return { suns: 1, nextTarget: 70, label: '1 Sol · Primer brote' };
+      if (total < 90) return { suns: 2, nextTarget: 90, label: '2 Soles · Valle sereno' };
+      if (total < 110) return { suns: 3, nextTarget: 110, label: '3 Soles · Ecosistema vivo' };
+      if (total < 130) return { suns: 4, nextTarget: 130, label: '4 Soles · Armonía plena' };
+      if (total < 140) return { suns: 5, nextTarget: 140, label: '5 Soles · Maestro natural' };
+      if (total < 150) return { suns: 6, nextTarget: 150, label: '6 Soles · Santuario perfecto' };
+      if (total < 160) return { suns: 7, nextTarget: 160, label: '7 Soles · Guardián legendario' };
+      const extraSuns = 8 + Math.floor((total - 160) / 10);
+      const nextTarget = 160 + (extraSuns - 7) * 10;
+      return { suns: extraSuns, nextTarget, label: `${extraSuns} Soles · Obra maestra` };
+    }
+
+    /** Desempate oficial: 1. Mayor total, 2. Mayor número de cubos colocados */
+    function getRankedPlayers() {
+      const entries = state.players.map((player, index) => ({
+        player,
+        index,
+        scores: calcPlayerScores(player),
+      }));
+
+      entries.sort((a, b) => {
+        if (b.scores.total !== a.scores.total) return b.scores.total - a.scores.total;
+        return b.scores.cubes - a.scores.cubes;
+      });
+
+      entries.forEach((entry, i) => {
+        if (i === 0) {
+          entry.rank = 1;
+        } else {
+          const prev = entries[i - 1];
+          const exactTie = entry.scores.total === prev.scores.total && entry.scores.cubes === prev.scores.cubes;
+          entry.rank = exactTie ? prev.rank : i + 1;
+        }
+      });
+
+      return entries;
+    }
+
+    // =========================================================================
+    // 7. ICONOS SVG Y UTILIDADES VISUALES
+    // =========================================================================
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function svgTokenStack(colors) {
+      const step = 6;
+      const baseY = 23;
+      const disks = colors
+        .map((color, idx) => {
+          const y = baseY - idx * step;
+          return `
+            <ellipse cx="14" cy="${y + 2.2}" rx="9.5" ry="3.8" fill="rgba(0,0,0,0.16)"/>
+            <path d="M4.5,${y} v2.2 a9.5,3.8 0 0 0 19,0 V${y} Z" fill="${color}" filter="brightness(0.86)"/>
+            <ellipse cx="14" cy="${y}" rx="9.5" ry="3.8" fill="${color}" stroke="rgba(255,255,255,0.45)" stroke-width="0.9"/>
+          `;
+        })
+        .join('');
+
+      return `<svg class="w-8 h-8 shrink-0" viewBox="0 0 28 30" fill="none" aria-hidden="true">${disks}</svg>`;
+    }
+
+    function svgCategoryBadge(type) {
+      const map = {
+        trees: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#3A7D44"/>
+                <path d="M16 9l-5 8h3.2v5h3.6v-5H21l-5-8z" fill="#FBF8F1"/>`,
+        mountains: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#5C6773"/>
+                    <path d="M8 22l5.5-9 3.5 5 2.5-3.5L24 22H8z" fill="#FBF8F1"/>`,
+        fields: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#D99B26"/>
+                 <path d="M16 9v14M16 13c-2.5-.5-4-2-4-4 2 0 3.5 1.5 4 4zm0 4c-2.5-.5-4-2-4-4 2 0 3.5 1.5 4 4zm0-4c2.5-.5 4-2 4-4-2 0-3.5 1.5-4 4zm0 4c2.5-.5 4-2 4-4-2 0-3.5 1.5-4 4z" stroke="#FBF8F1" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`,
+        buildings: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#C84B31"/>
+                    <path d="M9 15l7-5.5L23 15v7h-4.5v-4.5h-5V22H9v-7z" fill="#FBF8F1"/>`,
+        water: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#2B7A9B"/>
+                <path d="M8.5 14.5c1.8-1.5 3.7-1.5 5.5 0s3.7 1.5 5.5 0 2.5-1 4 0M8.5 19.5c1.8-1.5 3.7-1.5 5.5 0s3.7 1.5 5.5 0 2.5-1 4 0" stroke="#FBF8F1" stroke-width="2" stroke-linecap="round" fill="none"/>`,
+        animals: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#C47228"/>
+                  <circle cx="11.5" cy="13" r="1.8" fill="#FBF8F1"/>
+                  <circle cx="16" cy="11" r="1.8" fill="#FBF8F1"/>
+                  <circle cx="20.5" cy="13" r="1.8" fill="#FBF8F1"/>
+                  <path d="M11.5 19.5c0-2.5 2-4.2 4.5-4.2s4.5 1.7 4.5 4.2c0 1.5-1.2 2.5-4.5 2.5s-4.5-1-4.5-2.5z" fill="#FBF8F1"/>`,
+        spirit: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#6D5A99"/>
+                 <path d="M16 8l2 5.2 5.5.5-4.2 3.5 1.3 5.3L16 19.6l-4.6 2.9 1.3-5.3-4.2-3.5 5.5-.5L16 8z" fill="#FBF8F1"/>`,
+        cubes: `<polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="#E8DFCE" stroke="#C9BFA9" stroke-width="1"/>
+                <polygon points="16,9 22,12.5 16,16 10,12.5" fill="#E6B97A"/>
+                <polygon points="10,12.5 16,16 16,23 10,19.5" fill="#C99652"/>
+                <polygon points="22,12.5 16,16 16,23 22,19.5" fill="#B07D3D"/>`,
+      };
+      return `<svg class="w-9 h-9 shrink-0" viewBox="0 0 32 32" fill="none" aria-hidden="true">${map[type] || ''}</svg>`;
+    }
+
+    function showToast(message, tone = 'neutral') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const toneClasses = {
+        success: 'bg-forest text-white',
+        danger: 'bg-terracotta text-white',
+        neutral: 'bg-ink text-parchment',
+      }[tone] || 'bg-ink text-parchment';
+
+      toast.className = `${toneClasses} px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold shadow-float animate-fade-in text-center`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-6px)';
+        setTimeout(() => toast.remove(), 260);
+      }, 2400);
+    }
+
+    function openModal({ title, bodyHtml, actions }) {
+      const backdrop = document.getElementById('modal-backdrop');
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').innerHTML = bodyHtml;
+
+      const actionsEl = document.getElementById('modal-actions');
+      actionsEl.innerHTML = '';
+
+      actions.forEach((act) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = act.label;
+        btn.className = act.className || 'btn-tap px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-[#E2D8C5] text-ink';
+        btn.addEventListener('click', () => {
+          if (!act.keepOpen) closeModal();
+          if (typeof act.onClick === 'function') act.onClick();
+        });
+        actionsEl.appendChild(btn);
+      });
+
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+    }
+
+    function closeModal() {
+      const backdrop = document.getElementById('modal-backdrop');
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+    }
+
+    // =========================================================================
+    // 8. RENDERIZADO DE CABECERA E INSIGNIA DE ESTADO GOOGLE SHEETS
+    // =========================================================================
+    function renderCloudBadge() {
+      const btn = document.getElementById('btn-cloud-status');
+      const dot = document.getElementById('cloud-status-dot');
+      const text = document.getElementById('cloud-status-text');
+
+      if (cloudState.connected) {
+        btn.className = 'btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold border transition-all bg-emerald-500/20 border-emerald-300/40 text-emerald-100';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]';
+        text.textContent = 'Sheets activo';
+      } else if (cloudState.mode === 'connecting') {
+        btn.className = 'btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold border transition-all bg-white/10 border-white/20 text-white/85';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-300 shrink-0 animate-pulse';
+        text.textContent = 'Conectando...';
+      } else {
+        btn.className = 'btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold border transition-all bg-amber-400/20 border-amber-300/45 text-amber-100';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
+        text.textContent = 'Modo local';
+      }
+    }
+
+    function updateHistoryCountPill() {
+      const pill = document.getElementById('history-count-pill');
+      if (pill) pill.textContent = matchHistory.length;
+    }
+
+    function openCloudHelpModal() {
+      const isCloud = cloudState.connected;
+      const currentUrl = cloudState.apiUrl || resolveActiveSheetsUrl();
+
+      const statusBox = isCloud
+        ? `
+          <div class="p-3 rounded-2xl bg-forest/10 border border-forest/25 text-forest text-xs font-semibold mb-3">
+            Conectado correctamente a tu hoja de <strong>Google Sheets</strong>. Todas las partidas que guardes o elimines se sincronizan directamente allí.
+          </div>
+        `
+        : `
+          <div class="p-3 rounded-2xl bg-wheat/18 border border-wheat/35 text-[#8A5D09] text-xs font-semibold mb-3">
+            Actualmente estás en <strong>Modo local</strong>. Las partidas se guardan solo en este navegador.
+            ${cloudState.errorMessage ? `<div class="mt-1 font-normal opacity-90">${escapeHtml(cloudState.errorMessage)}</div>` : ''}
+          </div>
+        `;
+
+      const bodyHtml = `
+        ${statusBox}
+        <label for="sheets-url-input" class="block text-xs font-bold text-ink mb-1.5">
+          URL de Google Apps Script (<code class="font-mono">/exec</code>)
+        </label>
+        <input
+          id="sheets-url-input"
+          type="url"
+          value="${escapeHtml(currentUrl)}"
+          placeholder="https://script.google.com/macros/s/.../exec"
+          class="w-full bg-white border border-[#E2D8C5] focus:border-forest focus:ring-2 focus:ring-forest/15 rounded-xl px-3 py-2 text-xs font-mono text-ink outline-none"
+        />
+        <p class="mt-2 text-[11px] text-inkMuted leading-relaxed">
+          Pegarla aquí la guarda en este dispositivo al instante. Si subes el <code class="font-mono bg-parchmentDark px-1 rounded text-ink">index.html</code> a GitHub Pages, pégala también en <code class="font-mono bg-parchmentDark px-1 rounded text-ink">GOOGLE_SHEETS_API_URL</code> al inicio del script para que cargue sola en cualquier móvil.
+        </p>
+      `;
+
+      const actions = [
+        {
+          label: 'Cerrar',
+          className: 'btn-tap px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-[#E2D8C5] text-ink',
+        },
+        {
+          label: 'Guardar y conectar',
+          className: 'btn-tap px-4 py-2.5 rounded-xl text-sm font-bold bg-forestDeep text-white',
+          keepOpen: true,
+          onClick: async () => {
+            const input = document.getElementById('sheets-url-input');
+            const val = (input?.value || '').trim();
+            if (!val) {
+              try { localStorage.removeItem(STORAGE_SHEETS_URL_KEY); } catch (e) {}
+              cloudState.apiUrl = resolveActiveSheetsUrl();
+              closeModal();
+              if (cloudState.apiUrl) {
+                await syncHistoryFromSheets({ silent: false });
+              } else {
+                activateLocalFallback('URL eliminada. Trabajando en modo local.');
+                showToast('Cambiado a modo local', 'neutral');
+              }
+              return;
+            }
+            if (!isValidAppsScriptUrl(val)) {
+              showToast('La URL debe empezar por script.google.com y terminar en /exec', 'danger');
+              return;
+            }
+            try { localStorage.setItem(STORAGE_SHEETS_URL_KEY, val); } catch (e) {}
+            cloudState.apiUrl = val;
+            closeModal();
+            showToast('Conectando con Google Sheets...', 'neutral');
+            await syncHistoryFromSheets({ silent: false });
+          },
+        },
+      ];
+
+      openModal({
+        title: isCloud ? 'Google Sheets conectado' : 'Conectar con Google Sheets',
+        bodyHtml,
+        actions,
+      });
+    }
+
+    function renderHeaderControls() {
+      renderCloudBadge();
+      updateHistoryCountPill();
+
+      // Cara A / Cara B
+      const btnA = document.getElementById('btn-board-a');
+      const btnB = document.getElementById('btn-board-b');
+      const activeBoardCls = 'bg-white text-ink shadow-sm';
+      const inactiveBoardCls = 'text-white/75 hover:text-white';
+
+      btnA.className = `btn-tap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${state.boardSide === 'A' ? activeBoardCls : inactiveBoardCls}`;
+      btnB.className = `btn-tap px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${state.boardSide === 'B' ? activeBoardCls : inactiveBoardCls}`;
+
+      // Espíritu de la Naturaleza
+      const btnSpirit = document.getElementById('btn-toggle-spirit');
+      const dotSpirit = document.getElementById('spirit-toggle-dot');
+      btnSpirit.setAttribute('aria-pressed', String(state.spiritEnabled));
+      if (state.spiritEnabled) {
+        btnSpirit.className = 'btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-[#C6B8E8] bg-[#6D5A99] text-white shadow-xs';
+        dotSpirit.className = 'w-3.5 h-3.5 rounded-full bg-white border-2 border-white flex items-center justify-center';
+        dotSpirit.innerHTML = '<svg class="w-2.5 h-2.5 text-spirit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      } else {
+        btnSpirit.className = 'btn-tap inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border border-white/15 bg-black/15 text-white/80 hover:text-white';
+        dotSpirit.className = 'w-3.5 h-3.5 rounded-full border-2 border-white/50 bg-transparent';
+        dotSpirit.innerHTML = '';
+      }
+
+      // Contador de jugadores
+      document.getElementById('player-count-badge').textContent = state.players.length;
+      document.getElementById('btn-remove-player').disabled = state.players.length <= 1;
+      document.getElementById('btn-add-player').disabled = state.players.length >= 4;
+
+      // Pestañas de vista
+      const tabs = [
+        { id: 'tab-count', view: 'count', section: 'view-count' },
+        { id: 'tab-results', view: 'results', section: 'view-results' },
+        { id: 'tab-history', view: 'history', section: 'view-history' },
+      ];
+
+      tabs.forEach((t) => {
+        const btn = document.getElementById(t.id);
+        const sec = document.getElementById(t.section);
+        const active = state.activeView === t.view;
+        btn.className = `btn-tap py-2 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all ${
+          active ? 'bg-parchment text-ink shadow-sm' : 'text-white/75 hover:text-white'
+        }`;
+        if (active) sec.classList.remove('hidden');
+        else sec.classList.add('hidden');
+      });
+
+      const historyPill = document.getElementById('history-count-pill');
+      if (historyPill) {
+        historyPill.className = `px-1.5 py-0.5 rounded-md text-[10px] font-extrabold tabular-nums ${
+          state.activeView === 'history' ? 'bg-forestDeep text-white' : 'bg-white/15 text-white'
+        }`;
+      }
+
+      // Barra inferior fija solo visible en "Contar"
+      const footer = document.getElementById('sticky-footer-bar');
+      if (state.activeView === 'count') footer.classList.remove('hidden');
+      else footer.classList.add('hidden');
+    }
+
+    // =========================================================================
+    // 9. RENDERIZADO: PESTAÑAS DE JUGADORES Y BARRA INFERIOR
+    // =========================================================================
+    function renderPlayerTabs() {
+      const container = document.getElementById('player-tabs-container');
+      const ranked = getRankedPlayers();
+      const rankByIndex = {};
+      ranked.forEach((r) => { rankByIndex[r.index] = r.rank; });
+
+      container.innerHTML = state.players
+        .map((p, idx) => {
+          const isActive = idx === state.activePlayerIndex;
+          const sc = calcPlayerScores(p);
+          const activeClasses = isActive
+            ? 'bg-forestDeep text-white border-forestDeep shadow-sm'
+            : 'bg-parchment text-ink border-[#E5DCCB] hover:border-[#CFC4AE]';
+          const scoreBadgeClasses = isActive
+            ? 'bg-white/20 text-white'
+            : 'bg-white text-ink border border-[#E7DFCE]';
+
+          return `
+            <button
+              type="button"
+              data-action="select-player"
+              data-index="${idx}"
+              class="btn-tap shrink-0 flex-1 min-w-[116px] px-3 py-2 rounded-xl border transition-all flex items-center justify-between gap-2 ${activeClasses}"
+            >
+              <span class="text-xs sm:text-sm font-bold truncate">${escapeHtml(p.name)}</span>
+              <span class="px-2 py-0.5 rounded-lg text-xs font-extrabold tabular-nums ${scoreBadgeClasses}">${sc.total}</span>
+            </button>
+          `;
+        })
+        .join('');
+
+      const activePlayer = state.players[state.activePlayerIndex];
+      const nameInput = document.getElementById('active-player-name-input');
+      if (document.activeElement !== nameInput) {
+        nameInput.value = activePlayer.name;
+      }
+
+      const rankPill = document.getElementById('active-player-rank-pill');
+      if (state.players.length > 1) {
+        rankPill.textContent = `Posición: #${rankByIndex[state.activePlayerIndex]}`;
+        rankPill.classList.remove('hidden');
+        rankPill.classList.add('sm:inline-flex');
+      } else {
+        rankPill.classList.add('hidden');
+      }
+
+      // Barra fija inferior
+      const sc = calcPlayerScores(activePlayer);
+      document.getElementById('footer-player-name').textContent = activePlayer.name;
+      const parts = [`Paisajes ${sc.landscapes}`, `Animales ${sc.animals}`];
+      if (state.spiritEnabled) parts.push(`Espíritu ${sc.spirit}`);
+      document.getElementById('footer-breakdown').textContent = parts.join(' + ');
+      document.getElementById('footer-total-score').textContent = sc.total;
+    }
+
+    // =========================================================================
+    // 10. RENDERIZADO: TARJETAS DE CONTEO (VISTA 1)
+    // =========================================================================
+    function renderStepper({ value, actionMinus, actionPlus, accentClass = 'text-ink', min = 0 }) {
+      const disabledMinus = value <= min ? 'disabled' : '';
+      return `
+        <div class="inline-flex items-center gap-1.5 bg-parchment rounded-2xl p-1 border border-[#E5DCCB]">
+          <button
+            type="button"
+            ${actionMinus}
+            ${disabledMinus}
+            class="btn-tap w-11 h-11 rounded-xl bg-white border border-[#E2D8C5] flex items-center justify-center text-lg font-bold text-ink hover:bg-parchmentDark disabled:opacity-35 disabled:cursor-not-allowed shadow-2xs"
+            aria-label="Restar"
+          >−</button>
+          <span class="w-9 text-center text-base font-extrabold tabular-nums ${accentClass}">${value}</span>
+          <button
+            type="button"
+            ${actionPlus}
+            class="btn-tap w-11 h-11 rounded-xl bg-white border border-[#E2D8C5] flex items-center justify-center text-lg font-bold text-ink hover:bg-parchmentDark shadow-2xs"
+            aria-label="Sumar"
+          >+</button>
+        </div>
+      `;
+    }
+
+    function renderRuleToggle(ruleKey, shortText, fullText) {
+      const isOpen = Boolean(state.expandedRules[ruleKey]);
+      return `
+        <div class="mt-2.5">
+          <button
+            type="button"
+            data-action="toggle-rule"
+            data-rule="${ruleKey}"
+            class="w-full text-left flex items-center justify-between gap-2 text-[11px] sm:text-xs text-inkMuted hover:text-ink bg-parchment/80 hover:bg-parchmentDark/60 px-3 py-1.5 rounded-xl border border-[#EDE6D8] transition-colors"
+          >
+            <span class="truncate">${shortText}</span>
+            <svg class="w-3.5 h-3.5 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          ${isOpen ? `<p class="mt-1.5 px-3 py-2 text-xs text-inkMuted bg-parchment/50 rounded-xl border border-[#EFE9DC] leading-relaxed">${fullText}</p>` : ''}
+        </div>
+      `;
+    }
+
+    function renderCountCards() {
+      const grid = document.getElementById('categories-grid');
+      const p = state.players[state.activePlayerIndex];
+      const sc = calcPlayerScores(p);
+      const cards = [];
+
+      // 1. ÁRBOLES
+      cards.push(`
+        <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col">
+          <div class="h-1.5 w-full bg-gradient-to-r from-forest via-forest to-trunk"></div>
+          <div class="p-4 sm:p-5 flex-1 flex flex-col">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                ${svgCategoryBadge('trees')}
+                <div>
+                  <h2 class="text-base font-extrabold text-ink leading-tight">Árboles</h2>
+                  <p class="text-xs text-inkMuted">Según altura (1 / 3 / 7 pts)</p>
+                </div>
+              </div>
+              <div class="px-3 py-1.5 rounded-2xl bg-forest/10 border border-forest/20 text-forest font-extrabold text-base tabular-nums">
+                ${sc.trees} <span class="text-xs font-semibold">pts</span>
+              </div>
+            </div>
+
+            ${renderRuleToggle(
+              'trees',
+              '1 verde = 1 pt · 1 marrón+verde = 3 pts · 2 marrones+verde = 7 pts',
+              'Todo árbol debe terminar con una ficha verde arriba. Los troncos marrones sin copa verde encima no otorgan puntos.'
+            )}
+
+            <div class="mt-3.5 space-y-2.5">
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  ${svgTokenStack(['#3A7D44'])}
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-bold text-ink">1 ficha (verde)</div>
+                    <div class="text-[11px] text-inkMuted">1 pt c/u · <strong class="text-forest">${p.trees.h1 * 1} pts</strong></div>
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.trees.h1,
+                  actionMinus: 'data-action="step-tree" data-tier="h1" data-delta="-1"',
+                  actionPlus: 'data-action="step-tree" data-tier="h1" data-delta="1"',
+                  accentClass: 'text-forest',
+                })}
+              </div>
+
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  ${svgTokenStack(['#8C5A3C', '#3A7D44'])}
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-bold text-ink">2 fichas (marrón + verde)</div>
+                    <div class="text-[11px] text-inkMuted">3 pts c/u · <strong class="text-forest">${p.trees.h2 * 3} pts</strong></div>
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.trees.h2,
+                  actionMinus: 'data-action="step-tree" data-tier="h2" data-delta="-1"',
+                  actionPlus: 'data-action="step-tree" data-tier="h2" data-delta="1"',
+                  accentClass: 'text-forest',
+                })}
+              </div>
+
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  ${svgTokenStack(['#8C5A3C', '#8C5A3C', '#3A7D44'])}
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-bold text-ink">3 fichas (2 marrones + verde)</div>
+                    <div class="text-[11px] text-inkMuted">7 pts c/u · <strong class="text-forest">${p.trees.h3 * 7} pts</strong></div>
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.trees.h3,
+                  actionMinus: 'data-action="step-tree" data-tier="h3" data-delta="-1"',
+                  actionPlus: 'data-action="step-tree" data-tier="h3" data-delta="1"',
+                  accentClass: 'text-forest',
+                })}
+              </div>
+            </div>
+          </div>
+        </article>
+      `);
+
+      // 2. MONTAÑAS
+      cards.push(`
+        <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col">
+          <div class="h-1.5 w-full bg-mountain"></div>
+          <div class="p-4 sm:p-5 flex-1 flex flex-col">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                ${svgCategoryBadge('mountains')}
+                <div>
+                  <h2 class="text-base font-extrabold text-ink leading-tight">Montañas</h2>
+                  <p class="text-xs text-inkMuted">Según altura (1 / 3 / 7 pts)</p>
+                </div>
+              </div>
+              <div class="px-3 py-1.5 rounded-2xl bg-mountain/10 border border-mountain/20 text-mountain font-extrabold text-base tabular-nums">
+                ${sc.mountains} <span class="text-xs font-semibold">pts</span>
+              </div>
+            </div>
+
+            <div class="mt-2.5 flex items-center gap-2 px-3 py-2 rounded-xl bg-mountain/8 border border-mountain/20 text-xs font-semibold text-mountain">
+              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>Solo puntúan las montañas adyacentes a otra montaña</span>
+            </div>
+
+            <div class="mt-3 space-y-2.5">
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  ${svgTokenStack(['#5C6773'])}
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-bold text-ink">1 ficha gris</div>
+                    <div class="text-[11px] text-inkMuted">1 pt c/u · <strong class="text-mountain">${p.mountains.h1 * 1} pts</strong></div>
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.mountains.h1,
+                  actionMinus: 'data-action="step-mountain" data-tier="h1" data-delta="-1"',
+                  actionPlus: 'data-action="step-mountain" data-tier="h1" data-delta="1"',
+                  accentClass: 'text-mountain',
+                })}
+              </div>
+
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  ${svgTokenStack(['#5C6773', '#5C6773'])}
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-bold text-ink">2 fichas grises</div>
+                    <div class="text-[11px] text-inkMuted">3 pts c/u · <strong class="text-mountain">${p.mountains.h2 * 3} pts</strong></div>
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.mountains.h2,
+                  actionMinus: 'data-action="step-mountain" data-tier="h2" data-delta="-1"',
+                  actionPlus: 'data-action="step-mountain" data-tier="h2" data-delta="1"',
+                  accentClass: 'text-mountain',
+                })}
+              </div>
+
+              <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  ${svgTokenStack(['#5C6773', '#5C6773', '#5C6773'])}
+                  <div class="min-w-0">
+                    <div class="text-xs sm:text-sm font-bold text-ink">3 fichas grises</div>
+                    <div class="text-[11px] text-inkMuted">7 pts c/u · <strong class="text-mountain">${p.mountains.h3 * 7} pts</strong></div>
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.mountains.h3,
+                  actionMinus: 'data-action="step-mountain" data-tier="h3" data-delta="-1"',
+                  actionPlus: 'data-action="step-mountain" data-tier="h3" data-delta="1"',
+                  accentClass: 'text-mountain',
+                })}
+              </div>
+            </div>
+          </div>
+        </article>
+      `);
+
+      // 3. CAMPOS
+      cards.push(`
+        <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col">
+          <div class="h-1.5 w-full bg-wheat"></div>
+          <div class="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  ${svgCategoryBadge('fields')}
+                  <div>
+                    <h2 class="text-base font-extrabold text-ink leading-tight">Campos</h2>
+                    <p class="text-xs text-inkMuted">5 pts por grupo de 2+ amarillas</p>
+                  </div>
+                </div>
+                <div class="px-3 py-1.5 rounded-2xl bg-wheat/12 border border-wheat/25 text-[#A77310] font-extrabold text-base tabular-nums">
+                  ${sc.fields} <span class="text-xs font-semibold">pts</span>
+                </div>
+              </div>
+
+              ${renderRuleToggle(
+                'fields',
+                'Grupo conectado de 2 o más fichas amarillas adyacentes = 5 pts',
+                'Cada conjunto contiguo de 2 o más fichas amarillas cuenta como un único campo de 5 pts. Una amarilla suelta vale 0 pts.'
+              )}
+            </div>
+
+            <div class="mt-4 flex items-center justify-between gap-2 p-3 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+              <div>
+                <div class="text-sm font-bold text-ink">Campos válidos</div>
+                <div class="text-xs text-inkMuted">${p.fields} × 5 pts = <strong class="text-[#A77310]">${sc.fields} pts</strong></div>
+              </div>
+              ${renderStepper({
+                value: p.fields,
+                actionMinus: 'data-action="step-field" data-delta="-1"',
+                actionPlus: 'data-action="step-field" data-delta="1"',
+                accentClass: 'text-[#A77310]',
+              })}
+            </div>
+          </div>
+        </article>
+      `);
+
+      // 4. EDIFICIOS
+      cards.push(`
+        <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col">
+          <div class="h-1.5 w-full bg-terracotta"></div>
+          <div class="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  ${svgCategoryBadge('buildings')}
+                  <div>
+                    <h2 class="text-base font-extrabold text-ink leading-tight">Edificios</h2>
+                    <p class="text-xs text-inkMuted">5 pts si le rodean 3+ colores</p>
+                  </div>
+                </div>
+                <div class="px-3 py-1.5 rounded-2xl bg-terracotta/10 border border-terracotta/20 text-terracotta font-extrabold text-base tabular-nums">
+                  ${sc.buildings} <span class="text-xs font-semibold">pts</span>
+                </div>
+              </div>
+
+              ${renderRuleToggle(
+                'buildings',
+                'Edificio rodeado por al menos 3 colores distintos = 5 pts',
+                'Una ficha roja colocada sobre marrón, gris o roja puntúa 5 pts si tiene adyacentes al menos 3 colores diferentes mirando la ficha superior de cada casilla vecina.'
+              )}
+            </div>
+
+            <div class="mt-4 flex items-center justify-between gap-2 p-3 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+              <div>
+                <div class="text-sm font-bold text-ink">Edificios válidos</div>
+                <div class="text-xs text-inkMuted">${p.buildings} × 5 pts = <strong class="text-terracotta">${sc.buildings} pts</strong></div>
+              </div>
+              ${renderStepper({
+                value: p.buildings,
+                actionMinus: 'data-action="step-building" data-delta="-1"',
+                actionPlus: 'data-action="step-building" data-delta="1"',
+                accentClass: 'text-terracotta',
+              })}
+            </div>
+          </div>
+        </article>
+      `);
+
+      // 5. AGUA (CARA A: RÍO | CARA B: ISLAS)
+      if (state.boardSide === 'A') {
+        const riverTableHtml = RIVER_TABLE.map((row) => {
+          const isSelected = (row.len === 0 && p.riverLength <= 1) || p.riverLength === row.len;
+          return `
+            <button
+              type="button"
+              data-action="set-river"
+              data-len="${row.len}"
+              class="btn-tap flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-center transition-all ${
+                isSelected
+                  ? 'bg-river text-white border-river shadow-xs'
+                  : 'bg-white text-ink border-[#E5DCCB] hover:border-river/50'
+              }"
+            >
+              <span class="text-[10px] font-semibold ${isSelected ? 'text-white/85' : 'text-inkMuted'}">${row.label}</span>
+              <span class="text-xs font-extrabold tabular-nums">${row.pts}</span>
+            </button>
+          `;
+        }).join('');
+
+        cards.push(`
+          <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col md:col-span-2">
+            <div class="h-1.5 w-full bg-river"></div>
+            <div class="p-4 sm:p-5">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  ${svgCategoryBadge('water')}
+                  <div>
+                    <h2 class="text-base font-extrabold text-ink leading-tight">Agua · Río más largo <span class="text-xs font-semibold text-river">(Cara A)</span></h2>
+                    <p class="text-xs text-inkMuted">Longitud continua de fichas azules</p>
+                  </div>
+                </div>
+                <div class="px-3 py-1.5 rounded-2xl bg-river/10 border border-river/20 text-river font-extrabold text-base tabular-nums">
+                  ${sc.water} <span class="text-xs font-semibold">pts</span>
+                </div>
+              </div>
+
+              ${renderRuleToggle(
+                'waterA',
+                '0–1=0 · 2=2 · 3=5 · 4=8 · 5=11 · 6=15 · desde la 7.ª suma +4 pts c/u',
+                'Puntúa únicamente el recorrido más largo continuo de fichas azules sin repetir casillas. Si el río tiene 7 o más fichas, cada ficha adicional suma +4 pts.'
+              )}
+
+              <div class="mt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div>
+                  <div class="text-sm font-bold text-ink">Longitud del río más largo</div>
+                  <div class="text-xs text-inkMuted">
+                    ${p.riverLength >= 7
+                      ? `15 pts + ${p.riverLength - 6} × 4 pts = <strong class="text-river">${sc.water} pts</strong>`
+                      : `Equivalencia oficial: <strong class="text-river">${sc.water} pts</strong>`
+                    }
+                  </div>
+                </div>
+                ${renderStepper({
+                  value: p.riverLength,
+                  actionMinus: 'data-action="step-river" data-delta="-1"',
+                  actionPlus: 'data-action="step-river" data-delta="1"',
+                  accentClass: 'text-river',
+                })}
+              </div>
+
+              <div class="mt-3">
+                <div class="flex items-center justify-between text-[11px] font-semibold text-inkMuted mb-1.5 px-0.5">
+                  <span>Selector rápido (fichas → puntos)</span>
+                  <span class="text-river">7+ fichas: +4 pts c/u</span>
+                </div>
+                <div class="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                  ${riverTableHtml}
+                </div>
+              </div>
+            </div>
+          </article>
+        `);
+      } else {
+        const islandChips = [0, 1, 2, 3, 4, 5, 6]
+          .map((n) => {
+            const active = p.islands === n;
+            return `
+              <button
+                type="button"
+                data-action="set-islands"
+                data-count="${n}"
+                class="btn-tap py-2 px-3 rounded-xl border text-xs font-bold tabular-nums ${
+                  active
+                    ? 'bg-river text-white border-river shadow-xs'
+                    : 'bg-white text-ink border-[#E5DCCB] hover:border-river/50'
+                }"
+              >${n} ${n === 1 ? 'isla' : 'islas'}</button>
+            `;
+          })
+          .join('');
+
+        cards.push(`
+          <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col md:col-span-2">
+            <div class="h-1.5 w-full bg-gradient-to-r from-river to-wheat"></div>
+            <div class="p-4 sm:p-5">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  ${svgCategoryBadge('water')}
+                  <div>
+                    <h2 class="text-base font-extrabold text-ink leading-tight">Agua · Islas <span class="text-xs font-semibold text-river">(Cara B)</span></h2>
+                    <p class="text-xs text-inkMuted">5 pts por cada isla separada por agua</p>
+                  </div>
+                </div>
+                <div class="px-3 py-1.5 rounded-2xl bg-river/10 border border-river/20 text-river font-extrabold text-base tabular-nums">
+                  ${sc.water} <span class="text-xs font-semibold">pts</span>
+                </div>
+              </div>
+
+              ${renderRuleToggle(
+                'waterB',
+                'Cada zona de casillas no azules aislada por agua = 5 pts',
+                'En la Cara B, las fichas azules dividen el tablero en islas. Toda porción de tablero separada completamente de las demás por agua vale 5 pts.'
+              )}
+
+              <div class="mt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                <div>
+                  <div class="text-sm font-bold text-ink">Islas separadas</div>
+                  <div class="text-xs text-inkMuted">${p.islands} × 5 pts = <strong class="text-river">${sc.water} pts</strong></div>
+                </div>
+                ${renderStepper({
+                  value: p.islands,
+                  actionMinus: 'data-action="step-islands" data-delta="-1"',
+                  actionPlus: 'data-action="step-islands" data-delta="1"',
+                  accentClass: 'text-river',
+                })}
+              </div>
+
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                ${islandChips}
+              </div>
+            </div>
+          </article>
+        `);
+      }
+
+      // 6. CARTAS DE ANIMAL
+      const quickAnimalBtns = QUICK_ANIMAL_VALUES.map(
+        (val) => `
+          <button
+            type="button"
+            data-action="add-animal"
+            data-value="${val}"
+            class="btn-tap h-11 rounded-xl bg-parchment hover:bg-ochre hover:text-white border border-[#E5DCCB] hover:border-ochre text-xs sm:text-sm font-bold text-ink tabular-nums transition-colors"
+          >+${val}</button>
+        `
+      ).join('');
+
+      const animalChips = p.animals.length > 0
+        ? p.animals
+            .map(
+              (val, idx) => `
+                <button
+                  type="button"
+                  data-action="remove-animal"
+                  data-index="${idx}"
+                  title="Tocar para eliminar carta"
+                  class="btn-tap inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-xl bg-ochre/12 hover:bg-terracotta/15 text-ochre hover:text-terracotta border border-ochre/25 text-xs font-extrabold tabular-nums transition-colors"
+                >
+                  <span>+${val}</span>
+                  <svg class="w-3.5 h-3.5 opacity-75" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              `
+            )
+            .join('')
+        : `<span class="text-xs text-inkMuted italic">Pulsa un valor arriba o escribe uno libre para sumar tus cartas de animal.</span>`;
+
+      cards.push(`
+        <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col md:col-span-2">
+          <div class="h-1.5 w-full bg-ochre"></div>
+          <div class="p-4 sm:p-5">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                ${svgCategoryBadge('animals')}
+                <div>
+                  <h2 class="text-base font-extrabold text-ink leading-tight">Cartas de Animal</h2>
+                  <p class="text-xs text-inkMuted">${p.animals.length} ${p.animals.length === 1 ? 'carta añadida' : 'cartas añadidas'}</p>
+                </div>
+              </div>
+              <div class="px-3 py-1.5 rounded-2xl bg-ochre/12 border border-ochre/25 text-ochre font-extrabold text-base tabular-nums">
+                ${sc.animals} <span class="text-xs font-semibold">pts</span>
+              </div>
+            </div>
+
+            ${renderRuleToggle(
+              'animals',
+              'Suma el número más alto visible destapado en cada carta de animal',
+              'Por cada carta de animal (completada o a medias en tu zona), añade únicamente el valor más alto que hayas descubierto al retirar cubos.'
+            )}
+
+            <div class="mt-3.5 grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+              ${quickAnimalBtns}
+            </div>
+
+            <form id="custom-animal-form" class="mt-3 flex items-center gap-2">
+              <input
+                id="custom-animal-input"
+                type="number"
+                min="1"
+                max="99"
+                inputmode="numeric"
+                placeholder="Otro valor (ej. 9, 14, 20...)"
+                class="flex-1 min-w-0 h-11 bg-parchment border border-[#E2D8C5] focus:border-ochre focus:ring-2 focus:ring-ochre/15 rounded-xl px-3.5 text-sm font-semibold text-ink outline-none"
+              />
+              <button
+                type="submit"
+                class="btn-tap h-11 px-4 rounded-xl bg-ochre hover:bg-[#AE611D] text-white text-xs sm:text-sm font-bold shadow-xs shrink-0"
+              >Añadir</button>
+            </form>
+
+            <div class="mt-3.5 p-3 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-inkMuted">
+                  Cartas registradas (${p.animals.length}) · toca para quitar
+                </span>
+                ${p.animals.length > 0
+                  ? `<button type="button" data-action="clear-animals" class="text-[11px] font-semibold text-inkMuted hover:text-terracotta underline underline-offset-2">Vaciar</button>`
+                  : ''}
+              </div>
+              <div class="flex flex-wrap gap-1.5 items-center min-h-[30px]">
+                ${animalChips}
+              </div>
+            </div>
+          </div>
+        </article>
+      `);
+
+      // 7. ESPÍRITU DE LA NATURALEZA (OPCIONAL)
+      if (state.spiritEnabled) {
+        cards.push(`
+          <article class="bg-white rounded-3xl border border-spirit/30 shadow-card overflow-hidden flex flex-col">
+            <div class="h-1.5 w-full bg-spirit"></div>
+            <div class="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    ${svgCategoryBadge('spirit')}
+                    <div>
+                      <h2 class="text-base font-extrabold text-ink leading-tight">Espíritu de la Naturaleza</h2>
+                      <p class="text-xs text-inkMuted">Bonificación de tu carta de Espíritu</p>
+                    </div>
+                  </div>
+                  <div id="spirit-card-subtotal" class="px-3 py-1.5 rounded-2xl bg-spirit/12 border border-spirit/25 text-spirit font-extrabold text-base tabular-nums">
+                    ${sc.spirit} <span class="text-xs font-semibold">pts</span>
+                  </div>
+                </div>
+
+                ${renderRuleToggle(
+                  'spirit',
+                  'Puntúa solo si colocaste el cubo del Espíritu en tu tablero',
+                  'Tu carta de Espíritu de la Naturaleza añade puntos extra al final de la partida únicamente si lograste colocar su cubo en el tablero.'
+                )}
+              </div>
+
+              <div class="mt-3.5 space-y-2.5">
+                <div class="flex items-center justify-between gap-2 p-2.5 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+                  <label for="spirit-direct-input" class="text-xs sm:text-sm font-bold text-ink pl-1">Puntos</label>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" data-action="step-spirit" data-delta="-1" ${p.spirit <= 0 ? 'disabled' : ''} class="btn-tap w-11 h-11 rounded-xl bg-white border border-[#E2D8C5] font-bold text-lg text-ink disabled:opacity-35">−</button>
+                    <input
+                      id="spirit-direct-input"
+                      type="number"
+                      min="0"
+                      max="200"
+                      inputmode="numeric"
+                      value="${p.spirit}"
+                      class="w-16 h-11 text-center bg-white border border-spirit/35 focus:border-spirit focus:ring-2 focus:ring-spirit/15 rounded-xl text-base font-extrabold text-spirit tabular-nums outline-none"
+                    />
+                    <button type="button" data-action="step-spirit" data-delta="1" class="btn-tap w-11 h-11 rounded-xl bg-white border border-[#E2D8C5] font-bold text-lg text-ink">+</button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-1.5">
+                  ${[2, 4, 5, 10]
+                    .map(
+                      (v) => `
+                        <button type="button" data-action="step-spirit" data-delta="${v}" class="btn-tap py-2.5 rounded-xl bg-spirit/10 hover:bg-spirit hover:text-white text-spirit text-xs font-bold border border-spirit/20 transition-colors">+${v}</button>
+                      `
+                    )
+                    .join('')}
+                </div>
+              </div>
+            </div>
+          </article>
+        `);
+      }
+
+      // 8. CUBOS DE ANIMAL (DESEMPATE)
+      cards.push(`
+        <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden flex flex-col ${state.spiritEnabled ? '' : 'md:col-span-2'}">
+          <div class="h-1.5 w-full bg-[#C99652]"></div>
+          <div class="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                ${svgCategoryBadge('cubes')}
+                <div>
+                  <h2 class="text-base font-extrabold text-ink leading-tight">Cubos de Animal</h2>
+                  <p class="text-xs text-inkMuted">Desempate oficial · no suma puntos</p>
+                </div>
+              </div>
+              <span class="px-2.5 py-1 rounded-xl bg-parchmentDark text-inkMuted text-xs font-bold tabular-nums">
+                ${p.cubes} ${p.cubes === 1 ? 'cubo' : 'cubos'}
+              </span>
+            </div>
+
+            <div class="mt-3.5 flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-parchment/60 border border-[#EFE9DC]">
+              <div class="text-xs text-inkMuted max-w-xs">
+                En caso de empate en puntos totales, gana quien tenga más cubos colocados en su tablero.
+              </div>
+              <div class="flex items-center gap-1.5">
+                ${renderStepper({
+                  value: p.cubes,
+                  actionMinus: 'data-action="step-cubes" data-delta="-1"',
+                  actionPlus: 'data-action="step-cubes" data-delta="1"',
+                  accentClass: 'text-[#9A6B2F]',
+                })}
+                <button
+                  type="button"
+                  data-action="step-cubes"
+                  data-delta="5"
+                  class="btn-tap h-[54px] px-3 rounded-2xl bg-parchment hover:bg-parchmentDark border border-[#E5DCCB] text-xs font-extrabold text-[#9A6B2F]"
+                  title="Sumar 5 cubos"
+                >+5</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      `);
+
+      grid.innerHTML = cards.join('');
+
+      // Vincular formulario de animal libre
+      const animalForm = document.getElementById('custom-animal-form');
+      if (animalForm) {
+        animalForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const input = document.getElementById('custom-animal-input');
+          const val = parseInt(input.value, 10);
+          if (!isNaN(val) && val > 0) {
+            state.players[state.activePlayerIndex].animals.push(val);
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            const nextInput = document.getElementById('custom-animal-input');
+            if (nextInput) nextInput.focus();
+          }
+        });
+      }
+
+      // Vincular input directo de Espíritu
+      const spiritInput = document.getElementById('spirit-direct-input');
+      if (spiritInput) {
+        spiritInput.addEventListener('input', (e) => {
+          const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+          state.players[state.activePlayerIndex].spirit = val;
+          saveDraftToLocalStorage();
+          renderPlayerTabs();
+          const badge = document.getElementById('spirit-card-subtotal');
+          if (badge) badge.innerHTML = `${val} <span class="text-xs font-semibold">pts</span>`;
+        });
+      }
+    }
+
+    // =========================================================================
+    // 11. RENDERIZADO: VISTA 2 — RESULTADOS, PODIO, SOLES, BLOC Y GRÁFICO
+    // =========================================================================
+    function renderResultsView() {
+      const container = document.getElementById('view-results');
+      const ranked = getRankedPlayers();
+      const isSolo = state.players.length === 1;
+
+      const saveBtnLabel = cloudState.isSaving
+        ? `<svg class="w-4 h-4 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg><span>Guardando...</span>`
+        : `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg><span>${cloudState.connected ? 'Guardar partida en Sheets' : 'Guardar partida (local)'}</span>`;
+
+      const actionBarHtml = `
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            data-action="save-match"
+            ${cloudState.isSaving ? 'disabled' : ''}
+            class="btn-tap py-3.5 px-4 rounded-2xl bg-forest hover:bg-[#316B3A] disabled:opacity-70 text-white font-bold text-sm shadow-card flex items-center justify-center gap-2"
+          >
+            ${saveBtnLabel}
+          </button>
+
+          <button
+            type="button"
+            data-action="reset-match"
+            class="btn-tap py-3.5 px-4 rounded-2xl bg-white hover:border-terracotta/45 hover:text-terracotta border border-[#E2D8C5] text-ink font-bold text-sm shadow-card flex items-center justify-center gap-2"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span>Nueva partida</span>
+          </button>
+        </div>
+      `;
+
+      // 1. PODIO O RESUMEN SOLITARIO CON SOLES
+      let podiumHtml = '';
+      if (isSolo) {
+        const solo = ranked[0];
+        const s = solo.scores;
+        const sunEval = calcSoloSuns(s.total);
+        const sunIcons = sunEval.suns > 0
+          ? Array.from({ length: Math.min(sunEval.suns, 8) })
+              .map(
+                () => `
+                  <svg class="w-6 h-6 text-wheat drop-shadow-2xs" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="12" cy="12" r="5"/>
+                    <path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                `
+              )
+              .join('')
+          : `<span class="text-xs font-semibold text-inkMuted">Llega a 40 pts para conseguir tu primer Sol</span>`;
+
+        const catList = [
+          { name: 'Árboles', val: s.trees, color: '#3A7D44' },
+          { name: 'Montañas', val: s.mountains, color: '#5C6773' },
+          { name: 'Campos', val: s.fields, color: '#D99B26' },
+          { name: 'Edificios', val: s.buildings, color: '#C84B31' },
+          { name: state.boardSide === 'A' ? 'Río' : 'Islas', val: s.water, color: '#2B7A9B' },
+          { name: 'Animales', val: s.animals, color: '#C47228' },
+        ];
+        if (state.spiritEnabled) catList.push({ name: 'Espíritu', val: s.spirit, color: '#6D5A99' });
+
+        podiumHtml = `
+          <div class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden">
+            <div class="bg-gradient-to-r from-forest/15 via-river/12 to-wheat/20 px-5 py-5 border-b border-[#EDE6D8]">
+              <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 border border-[#E2D8C5] text-[11px] font-bold text-forest uppercase tracking-wider">
+                    Modo Solitario · Cara ${state.boardSide} (${state.boardSide === 'A' ? 'Río' : 'Islas'})
+                  </span>
+                  <h2 class="mt-2 text-2xl font-extrabold text-ink">${escapeHtml(solo.player.name)}</h2>
+                  <p class="text-xs font-semibold text-[#8E610B] mt-1">${sunEval.label}</p>
+                  <div class="mt-2 flex flex-wrap items-center gap-1">${sunIcons}</div>
+                  ${s.total > 0 ? `<p class="text-[11px] text-inkMuted mt-1.5">Próximo sol a los <strong>${sunEval.nextTarget} pts</strong> (faltan ${Math.max(0, sunEval.nextTarget - s.total)} pts)</p>` : ''}
+                </div>
+                <div class="bg-white rounded-2xl px-5 py-3 border border-[#E5DCCB] shadow-xs text-center">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-inkMuted">Total</div>
+                  <div class="text-4xl font-extrabold text-ink tabular-nums leading-tight">${s.total}</div>
+                  <div class="text-[11px] font-semibold text-inkMuted">${s.cubes} ${s.cubes === 1 ? 'cubo' : 'cubos'}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-5">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-inkMuted mb-3">Desglose por categoría</h3>
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                ${catList
+                  .map((c) => {
+                    const pct = s.total > 0 ? Math.round((c.val / s.total) * 100) : 0;
+                    return `
+                      <div class="p-3 rounded-2xl bg-parchment/70 border border-[#EFE9DC]">
+                        <div class="flex items-center gap-1.5">
+                          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${c.color}"></span>
+                          <span class="text-xs font-bold text-ink truncate">${c.name}</span>
+                        </div>
+                        <div class="mt-1.5 flex items-baseline justify-between">
+                          <span class="text-xl font-extrabold text-ink tabular-nums">${c.val}</span>
+                          <span class="text-[11px] font-semibold text-inkMuted">${pct}%</span>
+                        </div>
+                        <div class="mt-1.5 h-1.5 w-full rounded-full bg-[#E8E0D2] overflow-hidden">
+                          <div class="h-full rounded-full transition-all" style="width:${pct}%; background:${c.color}"></div>
+                        </div>
+                      </div>
+                    `;
+                  })
+                  .join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        const first = ranked[0];
+        const tiedOnPoints = ranked.filter((r) => r.scores.total === first.scores.total);
+        const sharedWinners = ranked.filter((r) => r.rank === 1);
+
+        let tieBannerHtml = '';
+        if (tiedOnPoints.length > 1 && first.scores.total > 0) {
+          if (sharedWinners.length === 1) {
+            const runnerUp = tiedOnPoints[1];
+            tieBannerHtml = `
+              <div class="mt-3 px-3.5 py-2.5 rounded-2xl bg-forest/10 border border-forest/25 text-xs text-forest font-semibold flex items-center gap-2">
+                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Desempate por cubos: <strong>${escapeHtml(first.player.name)}</strong> (${first.scores.cubes} cubos) gana a ${escapeHtml(runnerUp.player.name)} (${runnerUp.scores.cubes} cubos).</span>
+              </div>
+            `;
+          } else {
+            const allZeroCubes = sharedWinners.every((w) => w.scores.cubes === 0);
+            tieBannerHtml = `
+              <div class="mt-3 px-3.5 py-2.5 rounded-2xl bg-wheat/15 border border-wheat/35 text-xs text-[#8A5D09] font-semibold flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  ${allZeroCubes
+                    ? 'Empate en puntos con 0 cubos registrados. Añade los cubos colocados de cada jugador empatado para aplicar el desempate oficial.'
+                    : `Empate exacto en puntos (${first.scores.total} pts) y cubos (${first.scores.cubes}). ¡Victoria compartida!`}
+                </span>
+                ${allZeroCubes
+                  ? `<button type="button" data-action="goto-count-player" data-index="${first.index}" class="btn-tap px-2.5 py-1 rounded-lg bg-white border border-wheat/40 text-ink font-bold text-[11px]">Añadir cubos</button>`
+                  : ''}
+              </div>
+            `;
+          }
+        }
+
+        const medalColors = {
+          1: 'bg-wheat/22 text-[#9A6B0C] border-wheat/45',
+          2: 'bg-mountain/12 text-mountain border-mountain/25',
+          3: 'bg-ochre/12 text-ochre border-ochre/25',
+          4: 'bg-parchmentDark text-inkMuted border-[#E2D8C5]',
+        };
+
+        const winnerTitle = sharedWinners.length > 1
+          ? sharedWinners.map((w) => escapeHtml(w.player.name)).join(' & ')
+          : escapeHtml(first.player.name);
+
+        podiumHtml = `
+          <div class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden">
+            <div class="bg-gradient-to-r from-wheat/18 via-forest/10 to-river/12 px-5 py-5 border-b border-[#EDE6D8]">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/85 border border-[#E2D8C5] text-[11px] font-bold text-[#9A6B0C] uppercase tracking-wider">
+                    ${first.scores.total === 0 ? 'Clasificación actual' : (sharedWinners.length > 1 ? 'Victoria compartida' : 'Ganador de la partida')}
+                  </span>
+                  <h2 class="mt-2 text-2xl font-extrabold text-ink leading-tight">${winnerTitle}</h2>
+                  <p class="text-xs text-inkMuted mt-0.5">
+                    Cara ${state.boardSide} (${state.boardSide === 'A' ? 'Río' : 'Islas'})${state.spiritEnabled ? ' · Con Espíritu de la Naturaleza' : ''}
+                  </p>
+                </div>
+                <div class="bg-white rounded-2xl px-4 py-2.5 border border-[#E5DCCB] shadow-xs text-center">
+                  <div class="text-[10px] font-bold uppercase tracking-wider text-inkMuted">Mejor marca</div>
+                  <div class="text-3xl font-extrabold text-ink tabular-nums leading-tight">${first.scores.total} <span class="text-xs font-semibold text-inkMuted">pts</span></div>
+                </div>
+              </div>
+              ${tieBannerHtml}
+            </div>
+
+            <div class="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              ${ranked
+                .map(
+                  (entry) => `
+                    <button
+                      type="button"
+                      data-action="goto-count-player"
+                      data-index="${entry.index}"
+                      class="btn-tap text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                        entry.rank === 1 && entry.scores.total > 0
+                          ? 'bg-parchment border-wheat/45 shadow-xs'
+                          : 'bg-parchment/50 border-[#EFE9DC] hover:border-[#DCD2BF]'
+                      }"
+                    >
+                      <div class="flex items-center gap-3 min-w-0">
+                        <span class="w-9 h-9 rounded-xl border flex items-center justify-center font-extrabold text-sm shrink-0 ${medalColors[entry.rank] || medalColors[4]}">
+                          #${entry.rank}
+                        </span>
+                        <div class="min-w-0">
+                          <div class="text-sm font-extrabold text-ink truncate">${escapeHtml(entry.player.name)}</div>
+                          <div class="text-[11px] text-inkMuted truncate">
+                            Paisajes ${entry.scores.landscapes} · Animales ${entry.scores.animals}${state.spiritEnabled ? ` · Espíritu ${entry.scores.spirit}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <div class="text-xl font-extrabold text-ink tabular-nums leading-none">${entry.scores.total}</div>
+                        <div class="text-[10px] font-semibold text-inkMuted mt-1">${entry.scores.cubes} cubos</div>
+                      </div>
+                    </button>
+                  `
+                )
+                .join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // 2. TABLA ESTILO BLOC OFICIAL
+      const playerScoreList = state.players.map((p) => calcPlayerScores(p));
+      const maxByKey = (key) => {
+        if (state.players.length <= 1) return -1;
+        const m = Math.max(...playerScoreList.map((s) => s[key]));
+        return m > 0 ? m : -1;
+      };
+
+      const rowsConfig = [
+        { key: 'trees', label: 'Árboles', color: '#3A7D44' },
+        { key: 'mountains', label: 'Montañas', color: '#5C6773' },
+        { key: 'fields', label: 'Campos', color: '#D99B26' },
+        { key: 'buildings', label: 'Edificios', color: '#C84B31' },
+        { key: 'water', label: state.boardSide === 'A' ? 'Agua (Río)' : 'Agua (Islas)', color: '#2B7A9B' },
+        { key: 'landscapes', label: 'Subtotal Paisajes', isSubtotal: true },
+        { key: 'animals', label: 'Animales', color: '#C47228', showAnimalCount: true },
+      ];
+      if (state.spiritEnabled) rowsConfig.push({ key: 'spirit', label: 'Espíritu', color: '#6D5A99' });
+
+      const totalBest = maxByKey('total');
+      const cubesBest = maxByKey('cubes');
+
+      const tableHtml = `
+        <div class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card overflow-hidden">
+          <div class="px-5 py-4 border-b border-[#EDE6D8] flex items-center justify-between gap-2">
+            <div>
+              <h3 class="text-base font-extrabold text-ink">Hoja de Puntuación</h3>
+              <p class="text-xs text-inkMuted">Toca cualquier nombre para ajustar sus fichas</p>
+            </div>
+            <span class="text-[11px] font-semibold text-inkMuted bg-parchment px-2.5 py-1 rounded-lg border border-[#E7DFCE]">
+              Cara ${state.boardSide}
+            </span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[320px]">
+              <thead>
+                <tr class="bg-parchment/90 border-b border-[#E7DFCE]">
+                  <th class="py-3 pl-4 pr-2 text-xs font-bold uppercase tracking-wider text-inkMuted">Categoría</th>
+                  ${state.players
+                    .map(
+                      (p, idx) => `
+                        <th class="py-3 px-2 text-center">
+                          <button
+                            type="button"
+                            data-action="goto-count-player"
+                            data-index="${idx}"
+                            class="hover:underline text-xs sm:text-sm font-extrabold text-ink max-w-[100px] truncate inline-block"
+                          >${escapeHtml(p.name)}</button>
+                        </th>
+                      `
+                    )
+                    .join('')}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[#F0E9DC] text-sm">
+                ${rowsConfig
+                  .map((row) => {
+                    const best = maxByKey(row.key);
+                    if (row.isSubtotal) {
+                      return `
+                        <tr class="bg-parchment/70 font-bold">
+                          <td class="py-2.5 pl-4 pr-2 text-xs sm:text-sm text-ink">${row.label}</td>
+                          ${playerScoreList
+                            .map(
+                              (s) => `
+                                <td class="py-2.5 px-2 text-center tabular-nums text-xs sm:text-sm ${s[row.key] === best ? 'text-forest font-extrabold' : 'text-ink'}">
+                                  ${s[row.key]}
+                                </td>
+                              `
+                            )
+                            .join('')}
+                        </tr>
+                      `;
+                    }
+                    return `
+                      <tr class="hover:bg-parchment/35 transition-colors">
+                        <td class="py-2.5 pl-4 pr-2">
+                          <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${row.color}"></span>
+                            <span class="text-xs sm:text-sm font-semibold text-ink">${row.label}</span>
+                          </div>
+                        </td>
+                        ${playerScoreList
+                          .map((s) => {
+                            const isBest = s[row.key] === best;
+                            return `
+                              <td class="py-2.5 px-2 text-center tabular-nums">
+                                <span class="inline-flex items-center justify-center px-2 py-0.5 rounded-lg text-xs sm:text-sm ${
+                                  isBest ? 'bg-wheat/18 text-[#8C5F0A] font-extrabold' : 'text-ink font-semibold'
+                                }">
+                                  ${s[row.key]}${row.showAnimalCount && s.animalCount > 0 ? `<span class="text-[10px] opacity-70 ml-0.5">(${s.animalCount})</span>` : ''}
+                                </span>
+                              </td>
+                            `;
+                          })
+                          .join('')}
+                      </tr>
+                    `;
+                  })
+                  .join('')}
+
+                <tr class="bg-forestDeep text-white font-extrabold">
+                  <td class="py-3.5 pl-4 pr-2 text-sm">Total Final</td>
+                  ${playerScoreList
+                    .map(
+                      (s) => `
+                        <td class="py-3.5 px-2 text-center text-base sm:text-lg tabular-nums">
+                          <span class="${s.total === totalBest ? 'text-[#F5C563]' : 'text-white'}">${s.total}</span>
+                        </td>
+                      `
+                    )
+                    .join('')}
+                </tr>
+
+                <tr class="bg-parchment/50 text-xs text-inkMuted">
+                  <td class="py-2.5 pl-4 pr-2 font-semibold">Cubos (desempate)</td>
+                  ${playerScoreList
+                    .map(
+                      (s) => `
+                        <td class="py-2.5 px-2 text-center tabular-nums ${s.cubes === cubesBest ? 'font-extrabold text-[#9A6B2F]' : 'font-medium'}">
+                          ${s.cubes}
+                        </td>
+                      `
+                    )
+                    .join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      // 3. GRÁFICO COMPARATIVO PAISAJES VS ANIMALES (+ ESPÍRITU)
+      const maxTotalForChart = Math.max(1, ...ranked.map((r) => r.scores.total));
+      const chartHtml = `
+        <div class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+              <h3 class="text-base font-extrabold text-ink">Paisajes vs Animales</h3>
+              <p class="text-xs text-inkMuted">Proporción visual de los puntos obtenidos</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-xs font-semibold text-inkMuted">
+              <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-forest"></span>Paisajes</span>
+              <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-ochre"></span>Animales</span>
+              ${state.spiritEnabled ? `<span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-spirit"></span>Espíritu</span>` : ''}
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            ${ranked
+              .map((entry) => {
+                const s = entry.scores;
+                const barTotalWidth = s.total > 0 ? Math.max(8, Math.round((s.total / maxTotalForChart) * 100)) : 0;
+                const landShare = s.total > 0 ? (s.landscapes / s.total) * 100 : 0;
+                const animShare = s.total > 0 ? (s.animals / s.total) * 100 : 0;
+                const spirShare = s.total > 0 && state.spiritEnabled ? (s.spirit / s.total) * 100 : 0;
+
+                return `
+                  <div>
+                    <div class="flex items-baseline justify-between gap-2 mb-1.5">
+                      <span class="text-sm font-bold text-ink truncate">${escapeHtml(entry.player.name)}</span>
+                      <span class="text-xs font-semibold text-inkMuted tabular-nums shrink-0">
+                        ${s.landscapes} + ${s.animals}${state.spiritEnabled ? ` + ${s.spirit}` : ''} = <strong class="text-ink text-sm">${s.total} pts</strong>
+                      </span>
+                    </div>
+                    <div class="h-7 w-full rounded-xl bg-parchmentDark/80 overflow-hidden p-1 border border-[#EAE2D3]">
+                      ${s.total > 0
+                        ? `
+                          <div class="h-full rounded-lg overflow-hidden flex transition-all duration-300" style="width:${barTotalWidth}%">
+                            ${s.landscapes > 0 ? `<div class="h-full bg-forest flex items-center justify-center text-[10px] font-bold text-white truncate px-1" style="width:${landShare}%">${landShare >= 18 ? s.landscapes : ''}</div>` : ''}
+                            ${s.animals > 0 ? `<div class="h-full bg-ochre flex items-center justify-center text-[10px] font-bold text-white truncate px-1" style="width:${animShare}%">${animShare >= 18 ? s.animals : ''}</div>` : ''}
+                            ${state.spiritEnabled && s.spirit > 0 ? `<div class="h-full bg-spirit flex items-center justify-center text-[10px] font-bold text-white truncate px-1" style="width:${spirShare}%">${spirShare >= 16 ? s.spirit : ''}</div>` : ''}
+                          </div>
+                        `
+                        : `<div class="h-full flex items-center px-2 text-[11px] text-inkMuted">0 pts</div>`}
+                    </div>
+                  </div>
+                `;
+              })
+              .join('')}
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = podiumHtml + actionBarHtml + tableHtml + chartHtml;
+    }
+
+    // =========================================================================
+    // 12. RENDERIZADO: VISTA 3 — HISTORIAL EN GOOGLE SHEETS / LOCAL
+    // =========================================================================
+    function renderHistoryView() {
+      const container = document.getElementById('view-history');
+
+      const syncBanner = cloudState.connected
+        ? `
+          <div class="p-3.5 rounded-2xl bg-forest/10 border border-forest/20 flex flex-wrap items-center justify-between gap-2 text-xs text-forest font-semibold">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-forest shrink-0"></span>
+              <span>Conectado a Google Sheets (${matchHistory.length} ${matchHistory.length === 1 ? 'partida' : 'partidas'}).</span>
+            </div>
+            <button
+              type="button"
+              data-action="refresh-history"
+              ${cloudState.isLoadingHistory ? 'disabled' : ''}
+              class="btn-tap inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-forest/25 text-forest font-bold text-[11px] disabled:opacity-60"
+            >
+              <svg class="w-3.5 h-3.5 ${cloudState.isLoadingHistory ? 'animate-spin-fast' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+              </svg>
+              <span>${cloudState.isLoadingHistory ? 'Actualizando...' : 'Recargar'}</span>
+            </button>
+          </div>
+        `
+        : `
+          <div class="p-3.5 rounded-2xl bg-wheat/15 border border-wheat/35 flex flex-wrap items-center justify-between gap-2 text-xs text-[#8A5D09] font-semibold">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+              <span>Modo local activo: las partidas se guardan solo en este dispositivo.</span>
+            </div>
+            <button type="button" data-action="open-cloud-help" class="btn-tap px-2.5 py-1 rounded-lg bg-white border border-wheat/40 text-ink font-bold text-[11px]">
+              Conectar Sheets
+            </button>
+          </div>
+        `;
+
+      const listHtml = matchHistory.length > 0
+        ? matchHistory
+            .map(
+              (item) => `
+                <article class="bg-white rounded-3xl border border-[#E7DFCE] shadow-card p-4 sm:p-5 flex flex-col gap-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="text-base font-extrabold text-ink truncate">${escapeHtml(item.winnerLabel)}</h3>
+                        <span class="px-2.5 py-0.5 rounded-lg bg-wheat/18 text-[#8C5F0A] text-xs font-extrabold tabular-nums">${item.topScore} pts</span>
+                      </div>
+                      <p class="text-xs text-inkMuted mt-1">
+                        ${escapeHtml(item.dateStr || 'Reciente')} · Cara ${item.boardSide} (${item.boardSide === 'A' ? 'Río' : 'Islas'})${item.spiritEnabled ? ' · Espíritu' : ''} · ${item.players.length} ${item.players.length === 1 ? 'jugador' : 'jugadores'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      data-action="confirm-delete-history"
+                      data-id="${escapeHtml(item.id)}"
+                      class="btn-tap p-2.5 rounded-xl text-inkMuted hover:text-terracotta hover:bg-terracotta/10 transition-colors shrink-0"
+                      title="Eliminar partida"
+                      aria-label="Eliminar partida"
+                    >
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div class="flex flex-wrap gap-1.5 pt-2.5 border-t border-[#EFE9DC]">
+                    ${item.players
+                      .map(
+                        (pl, idx) => `
+                          <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-parchment border border-[#E7DFCE] text-xs">
+                            <span class="font-extrabold text-inkMuted">#${pl.rank || idx + 1}</span>
+                            <span class="font-bold text-ink">${escapeHtml(pl.name)}</span>
+                            <strong class="text-forest tabular-nums">${pl.total} pts</strong>
+                            <span class="text-[10px] text-inkMuted">(${pl.landscapes}P · ${pl.animals}A${item.spiritEnabled ? ` · ${pl.spirit}E` : ''})</span>
+                          </span>
+                        `
+                      )
+                      .join('')}
+                  </div>
+                </article>
+              `
+            )
+            .join('')
+        : `
+          <div class="bg-white rounded-3xl border border-dashed border-[#DDD3C0] p-8 text-center">
+            <div class="w-12 h-12 mx-auto rounded-2xl bg-parchmentDark flex items-center justify-center text-inkMuted mb-3">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+            <h3 class="text-base font-extrabold text-ink">Aún no hay partidas guardadas</h3>
+            <p class="text-xs text-inkMuted mt-1 max-w-xs mx-auto">
+              Cuando termines de contar una partida, pulsa en <strong>Guardar partida</strong> desde la pestaña Resultados para conservarla aquí.
+            </p>
+            <button
+              type="button"
+              data-action="goto-results"
+              class="btn-tap mt-4 px-4 py-2.5 rounded-xl bg-forestDeep text-white text-xs font-bold"
+            >Ir a Resultados</button>
+          </div>
+        `;
+
+      container.innerHTML = `
+        ${syncBanner}
+        <div class="space-y-3">
+          ${listHtml}
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 13. ACCIONES DE GUARDADO EN GOOGLE SHEETS / LOCAL Y REINICIO
+    // =========================================================================
+    async function saveCurrentMatch() {
+      if (cloudState.isSaving) return;
+
+      const ranked = getRankedPlayers();
+      const topScore = ranked[0].scores.total;
+      if (topScore === 0) {
+        showToast('Añade algún punto antes de guardar la partida', 'neutral');
+        return;
+      }
+
+      const winners = ranked.filter((r) => r.rank === 1);
+      const winnerLabel = state.players.length === 1
+        ? `${winners[0].player.name} (${calcSoloSuns(topScore).suns} ☀)`
+        : winners.length > 1
+          ? `Empate: ${winners.map((w) => w.player.name).join(' y ')}`
+          : `Ganador: ${winners[0].player.name}`;
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      const createdAtMs = Date.now();
+      const matchPayload = {
+        id: 'gs_' + createdAtMs,
+        dateStr,
+        createdAtMs,
+        boardSide: state.boardSide,
+        spiritEnabled: state.spiritEnabled,
+        winnerLabel,
+        topScore,
+        players: ranked.map((r) => ({
+          name: r.player.name,
+          rank: r.rank,
+          total: r.scores.total,
+          trees: r.scores.trees,
+          mountains: r.scores.mountains,
+          fields: r.scores.fields,
+          buildings: r.scores.buildings,
+          water: r.scores.water,
+          landscapes: r.scores.landscapes,
+          animals: r.scores.animals,
+          spirit: r.scores.spirit,
+          cubes: r.scores.cubes,
+        })),
+      };
+
+      cloudState.isSaving = true;
+      if (state.activeView === 'results') renderResultsView();
+
+      try {
+        if (cloudState.connected && cloudState.apiUrl) {
+          const data = await fetchSheetsJson(cloudState.apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'save', match: matchPayload }),
+          });
+
+          const savedRecord = {
+            ...matchPayload,
+            id: String(data.partidaId || matchPayload.id),
+            source: 'sheets',
+          };
+          matchHistory.unshift(savedRecord);
+          updateHistoryCountPill();
+          showToast('Partida guardada en Google Sheets', 'success');
+        } else {
+          const localRecord = {
+            ...matchPayload,
+            id: 'local_' + createdAtMs,
+            source: 'local',
+          };
+          matchHistory.unshift(localRecord);
+          if (matchHistory.length > 80) matchHistory = matchHistory.slice(0, 80);
+          saveLocalHistory(matchHistory);
+          updateHistoryCountPill();
+          showToast('Partida guardada en este dispositivo', 'success');
+        }
+      } catch (err) {
+        console.error('Error al guardar en Google Sheets:', err);
+        const fallbackRecord = { ...matchPayload, id: 'local_' + createdAtMs, source: 'local' };
+        const currentLocal = loadLocalHistory();
+        currentLocal.unshift(fallbackRecord);
+        saveLocalHistory(currentLocal);
+        activateLocalFallback('No se pudo escribir en Google Sheets. Guardado localmente.');
+        showToast('Error con Sheets · partida guardada en modo local', 'danger');
+      } finally {
+        cloudState.isSaving = false;
+        if (state.activeView === 'results') renderResultsView();
+        if (state.activeView === 'history') renderHistoryView();
+      }
+    }
+
+    function confirmDeleteMatch(matchId) {
+      openModal({
+        title: '¿Eliminar esta partida?',
+        bodyHtml: '<p>Esta acción borrará la partida del historial permanentemente y no se puede deshacer.</p>',
+        actions: [
+          {
+            label: 'Cancelar',
+            className: 'btn-tap px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-[#E2D8C5] text-ink',
+          },
+          {
+            label: 'Sí, eliminar',
+            className: 'btn-tap px-4 py-2.5 rounded-xl text-sm font-bold bg-terracotta text-white',
+            onClick: async () => {
+              try {
+                if (cloudState.connected && cloudState.apiUrl) {
+                  showToast('Eliminando de Google Sheets...', 'neutral');
+                  await fetchSheetsJson(cloudState.apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'delete', partidaId: matchId }),
+                  });
+                  matchHistory = matchHistory.filter((m) => m.id !== matchId);
+                  updateHistoryCountPill();
+                  renderHistoryView();
+                  showToast('Partida eliminada de Google Sheets', 'neutral');
+                } else {
+                  matchHistory = matchHistory.filter((m) => m.id !== matchId);
+                  saveLocalHistory(matchHistory);
+                  updateHistoryCountPill();
+                  renderHistoryView();
+                  showToast('Partida eliminada del dispositivo', 'neutral');
+                }
+              } catch (err) {
+                console.error('Error al borrar partida:', err);
+                showToast('No se pudo eliminar la partida', 'danger');
+              }
+            },
+          },
+        ],
+      });
+    }
+
+    function confirmResetScores() {
+      openModal({
+        title: '¿Empezar una nueva partida?',
+        bodyHtml: '<p>Se pondrán a cero todas las puntuaciones, cartas de animal y cubos de los jugadores actuales. Los nombres y tu historial guardado se mantendrán intactos.</p>',
+        actions: [
+          {
+            label: 'Cancelar',
+            className: 'btn-tap px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-[#E2D8C5] text-ink',
+          },
+          {
+            label: 'Nueva partida',
+            className: 'btn-tap px-4 py-2.5 rounded-xl text-sm font-bold bg-terracotta text-white',
+            onClick: () => {
+              state.players = state.players.map((p) => ({
+                ...p,
+                trees: { h1: 0, h2: 0, h3: 0 },
+                mountains: { h1: 0, h2: 0, h3: 0 },
+                fields: 0,
+                buildings: 0,
+                riverLength: 0,
+                islands: 0,
+                animals: [],
+                spirit: 0,
+                cubes: 0,
+              }));
+              state.activeView = 'count';
+              saveDraftToLocalStorage();
+              renderAll();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              showToast('Marcador reiniciado a cero', 'neutral');
+            },
+          },
+        ],
+      });
+    }
+
+    // =========================================================================
+    // 14. RENDERIZADO MAESTRO Y ENLACE DE EVENTOS
+    // =========================================================================
+    function renderAll() {
+      renderHeaderControls();
+      renderPlayerTabs();
+      if (state.activeView === 'count') renderCountCards();
+      else if (state.activeView === 'results') renderResultsView();
+      else if (state.activeView === 'history') renderHistoryView();
+    }
+
+    function bindEvents() {
+      // Estado Sheets
+      document.getElementById('btn-cloud-status').addEventListener('click', openCloudHelpModal);
+
+      // Tablero A / B
+      document.getElementById('btn-board-a').addEventListener('click', () => {
+        if (state.boardSide !== 'A') {
+          state.boardSide = 'A';
+          saveDraftToLocalStorage();
+          renderAll();
+        }
+      });
+
+      document.getElementById('btn-board-b').addEventListener('click', () => {
+        if (state.boardSide !== 'B') {
+          state.boardSide = 'B';
+          saveDraftToLocalStorage();
+          renderAll();
+        }
+      });
+
+      // Espíritu de la Naturaleza
+      document.getElementById('btn-toggle-spirit').addEventListener('click', () => {
+        state.spiritEnabled = !state.spiritEnabled;
+        saveDraftToLocalStorage();
+        renderAll();
+      });
+
+      // Jugadores (1 a 4)
+      document.getElementById('btn-add-player').addEventListener('click', () => {
+        if (state.players.length < 4) {
+          state.players.push(createPlayer(state.players.length));
+          state.activePlayerIndex = state.players.length - 1;
+          saveDraftToLocalStorage();
+          renderAll();
+          showToast(`Añadido ${state.players[state.activePlayerIndex].name}`, 'neutral');
+        }
+      });
+
+      document.getElementById('btn-remove-player').addEventListener('click', () => {
+        if (state.players.length > 1) {
+          const removed = state.players.pop();
+          if (state.activePlayerIndex >= state.players.length) {
+            state.activePlayerIndex = state.players.length - 1;
+          }
+          saveDraftToLocalStorage();
+          renderAll();
+          showToast(`Quitado ${removed.name}`, 'neutral');
+        }
+      });
+
+      // Navegación entre las 3 vistas
+      document.getElementById('tab-count').addEventListener('click', () => {
+        state.activeView = 'count';
+        saveDraftToLocalStorage();
+        renderAll();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      document.getElementById('tab-results').addEventListener('click', () => {
+        state.activeView = 'results';
+        saveDraftToLocalStorage();
+        renderAll();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      document.getElementById('tab-history').addEventListener('click', () => {
+        state.activeView = 'history';
+        saveDraftToLocalStorage();
+        renderAll();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Si hace más de 30 s desde la última lectura de Sheets, refresca en segundo plano
+        if (cloudState.connected && !cloudState.isLoadingHistory && (!cloudState.lastSyncedAt || Date.now() - cloudState.lastSyncedAt > 30000)) {
+          syncHistoryFromSheets({ silent: true });
+        }
+      });
+
+      document.getElementById('btn-goto-results').addEventListener('click', () => {
+        state.activeView = 'results';
+        saveDraftToLocalStorage();
+        renderAll();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      document.getElementById('btn-reset-scores').addEventListener('click', confirmResetScores);
+
+      // Nombre editable del jugador activo
+      const nameInput = document.getElementById('active-player-name-input');
+      nameInput.addEventListener('input', (e) => {
+        const val = e.target.value;
+        state.players[state.activePlayerIndex].name = val.trim() ? val : `Jugador ${state.activePlayerIndex + 1}`;
+        saveDraftToLocalStorage();
+        renderPlayerTabs();
+      });
+
+      nameInput.addEventListener('blur', (e) => {
+        if (!e.target.value.trim()) {
+          const fallback = `Jugador ${state.activePlayerIndex + 1}`;
+          state.players[state.activePlayerIndex].name = fallback;
+          e.target.value = fallback;
+          saveDraftToLocalStorage();
+          renderPlayerTabs();
+        }
+      });
+
+      // Cerrar modal tocando el fondo
+      document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+        if (e.target.id === 'modal-backdrop') closeModal();
+      });
+
+      // Delegación de eventos en contenido dinámico
+      document.getElementById('app').addEventListener('click', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+
+        const action = target.dataset.action;
+        const p = state.players[state.activePlayerIndex];
+
+        switch (action) {
+          case 'select-player': {
+            const idx = parseInt(target.dataset.index, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < state.players.length) {
+              state.activePlayerIndex = idx;
+              saveDraftToLocalStorage();
+              renderAll();
+            }
+            break;
+          }
+          case 'goto-count-player': {
+            const idx = parseInt(target.dataset.index, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < state.players.length) {
+              state.activePlayerIndex = idx;
+              state.activeView = 'count';
+              saveDraftToLocalStorage();
+              renderAll();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            break;
+          }
+          case 'goto-results': {
+            state.activeView = 'results';
+            saveDraftToLocalStorage();
+            renderAll();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            break;
+          }
+          case 'open-cloud-help': {
+            openCloudHelpModal();
+            break;
+          }
+          case 'refresh-history': {
+            syncHistoryFromSheets({ silent: false });
+            break;
+          }
+          case 'toggle-rule': {
+            const key = target.dataset.rule;
+            state.expandedRules[key] = !state.expandedRules[key];
+            saveDraftToLocalStorage();
+            renderCountCards();
+            break;
+          }
+          case 'step-tree': {
+            const tier = target.dataset.tier;
+            p.trees[tier] = Math.max(0, p.trees[tier] + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-mountain': {
+            const tier = target.dataset.tier;
+            p.mountains[tier] = Math.max(0, p.mountains[tier] + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-field': {
+            p.fields = Math.max(0, p.fields + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-building': {
+            p.buildings = Math.max(0, p.buildings + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-river': {
+            p.riverLength = Math.max(0, p.riverLength + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'set-river': {
+            p.riverLength = Math.max(0, parseInt(target.dataset.len, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-islands': {
+            p.islands = Math.max(0, p.islands + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'set-islands': {
+            p.islands = Math.max(0, parseInt(target.dataset.count, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'add-animal': {
+            const val = parseInt(target.dataset.value, 10);
+            if (!isNaN(val) && val > 0) {
+              p.animals.push(val);
+              saveDraftToLocalStorage();
+              renderPlayerTabs();
+              renderCountCards();
+            }
+            break;
+          }
+          case 'remove-animal': {
+            const idx = parseInt(target.dataset.index, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < p.animals.length) {
+              p.animals.splice(idx, 1);
+              saveDraftToLocalStorage();
+              renderPlayerTabs();
+              renderCountCards();
+            }
+            break;
+          }
+          case 'clear-animals': {
+            p.animals = [];
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-spirit': {
+            p.spirit = Math.max(0, p.spirit + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'step-cubes': {
+            p.cubes = Math.max(0, p.cubes + parseInt(target.dataset.delta, 10));
+            saveDraftToLocalStorage();
+            renderPlayerTabs();
+            renderCountCards();
+            break;
+          }
+          case 'save-match': {
+            saveCurrentMatch();
+            break;
+          }
+          case 'reset-match': {
+            confirmResetScores();
+            break;
+          }
+          case 'confirm-delete-history': {
+            confirmDeleteMatch(target.dataset.id);
+            break;
+          }
+        }
+      });
+    }
+
+    // =========================================================================
+    // 15. ARRANQUE DE LA APLICACIÓN
+    // =========================================================================
+    setupDynamicPwaAssets();
+    loadDraftFromLocalStorage();
+    bindEvents();
+    renderAll();
+    initCloudConnection();
+  </script>
+</body>
+</html>
